@@ -10,6 +10,7 @@ public class PageDto {
     Long id;
     Long parentId;
     String title;
+    String content;
     int position;
     LocalDateTime createdAt;
     LocalDateTime updatedAt;

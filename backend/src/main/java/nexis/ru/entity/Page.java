@@ -24,6 +24,9 @@ public class Page {
     @Column(nullable = false)
     private String title;
 
+    @Column(columnDefinition = "TEXT")
+    private String content;
+
     @Column(nullable = false)
     private int position;
 

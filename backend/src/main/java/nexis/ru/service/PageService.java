@@ -1,6 +1,7 @@
 package nexis.ru.service;
 
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import nexis.ru.entity.Page;
 import nexis.ru.entity.dto.PageDto;
@@ -25,6 +26,7 @@ public class PageService {
 
         pageDto.setParentId(request.getParentId());
         pageDto.setTitle(request.getTitle());
+        pageDto.setContent(request.getContent());
         pageDto.setPosition(request.getPosition());
         pageDto.setCreatedAt(LocalDateTime.now());
         pageDto.setUpdatedAt(LocalDateTime.now());
@@ -50,15 +52,17 @@ public class PageService {
 
     public PageDto updatePage(Long id, UpdatePageRequest request) {
         Page page = pageRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Page not fount"));
+                .orElseThrow(() -> new EntityNotFoundException("Page not found"));
 
         page.setTitle(request.getTitle());
+        page.setContent(request.getContent());
         page.setUpdatedAt(LocalDateTime.now());
 
         Page savedPage = pageRepository.save(page);
         return pageMapper.toDto(savedPage);
     }
 
+    @Transactional
     public void deletePage(Long id) {
         Page page = pageRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Page not found"));

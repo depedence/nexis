@@ -7,6 +7,7 @@ public class CreatePageRequest {
 
     Long parentId;
     String title;
+    String content;
     int position;
 
 }

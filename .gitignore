@@ -3,4 +3,13 @@
 backend/.idea
 backend/src/main/resources/application.yml
 
-frontend
+frontend/agents.md
+frontend/node_modules/
+frontend/dist/
+frontend/.idea/
+frontend/*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/.env
+frontend/.env.*
+frontend/*.log
+frontend/.vite/
