@@ -7,8 +7,8 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-04-27T16:52:35+0300",
-    comments = "version: 1.5.5.Final, compiler: Eclipse JDT (IDE) 3.46.0.v20260407-0427, environment: Java 21.0.10 (Eclipse Adoptium)"
+    date = "2026-04-28T11:28:58+0300",
+    comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.16 (Microsoft)"
 )
 @Component
 public class PageMapperImpl implements PageMapper {
@@ -21,11 +21,11 @@ public class PageMapperImpl implements PageMapper {
 
         PageDto pageDto = new PageDto();
 
-        pageDto.setCreatedAt( page.getCreatedAt() );
         pageDto.setId( page.getId() );
         pageDto.setParentId( page.getParentId() );
-        pageDto.setPosition( page.getPosition() );
         pageDto.setTitle( page.getTitle() );
+        pageDto.setPosition( page.getPosition() );
+        pageDto.setCreatedAt( page.getCreatedAt() );
         pageDto.setUpdatedAt( page.getUpdatedAt() );
 
         return pageDto;
@@ -39,11 +39,11 @@ public class PageMapperImpl implements PageMapper {
 
         Page page = new Page();
 
-        page.setCreatedAt( pageDto.getCreatedAt() );
         page.setId( pageDto.getId() );
         page.setParentId( pageDto.getParentId() );
-        page.setPosition( pageDto.getPosition() );
         page.setTitle( pageDto.getTitle() );
+        page.setPosition( pageDto.getPosition() );
+        page.setCreatedAt( pageDto.getCreatedAt() );
         page.setUpdatedAt( pageDto.getUpdatedAt() );
 
         return page;

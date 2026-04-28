@@ -2,3 +2,5 @@
 
 backend/.idea
 backend/src/main/resources/application.yml
+
+frontend
