@@ -28,6 +28,11 @@ public class PageRestController {
         return pageService.getPages();
     }
 
+    @GetMapping("/search")
+    public List<PageDto> searchPages(@RequestParam String q) {
+        return pageService.searchPages(q);
+    }
+
     @GetMapping("/{id}")
     public PageDto getPageById(@PathVariable Long id) {
         return pageService.getPageById(id);

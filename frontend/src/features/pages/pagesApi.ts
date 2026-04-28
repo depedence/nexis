@@ -5,6 +5,10 @@ export function getPages(signal?: AbortSignal) {
   return apiClient<PageDto[]>("/pages", { signal });
 }
 
+export function searchPages(query: string, signal?: AbortSignal) {
+  return apiClient<PageDto[]>(`/pages/search?q=${encodeURIComponent(query)}`, { signal });
+}
+
 export function createPage(payload: CreatePageRequest) {
   return apiClient<PageDto>("/pages", {
     method: "POST",

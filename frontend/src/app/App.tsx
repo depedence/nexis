@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PageWorkspace, type PageWorkspaceHandle } from "../features/pages/PageWorkspace";
+import { SearchCommandPalette } from "../features/pages/SearchCommandPalette";
 import { Sidebar } from "../features/pages/Sidebar";
 import { createPage, deletePage, getPages, updatePage } from "../features/pages/pagesApi";
 import { ApiError } from "../shared/api/apiClient";
@@ -186,6 +187,13 @@ export function App() {
     action();
   }
 
+  function handleOpenSearchResult(page: PageDto) {
+    runWithUnsavedChangesGuard(() => {
+      setPages((current) => sortPages(upsertPage(current, page)));
+      setSelectedPageId(page.id);
+    });
+  }
+
   return (
     <div className="app-frame">
       <Sidebar
@@ -211,6 +219,7 @@ export function App() {
         page={selectedPage}
         pagesLoading={pagesLoading}
         savingPageId={savingPageId}
+        topbarContent={<SearchCommandPalette onOpenPage={handleOpenSearchResult} />}
         onCreatePage={() => runWithUnsavedChangesGuard(() => void handleCreatePage())}
         onSavePage={handleSavePage}
       />
@@ -223,6 +232,14 @@ const EXIT_ANIMATION_MS = 180;
 
 function sortPages(pages: PageDto[]) {
   return [...pages].sort((left, right) => left.position - right.position || left.id - right.id);
+}
+
+function upsertPage(pages: PageDto[], nextPage: PageDto) {
+  if (pages.some((page) => page.id === nextPage.id)) {
+    return pages.map((page) => (page.id === nextPage.id ? nextPage : page));
+  }
+
+  return [...pages, nextPage];
 }
 
 function getErrorMessage(error: unknown, fallback: string) {

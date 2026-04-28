@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  type ReactNode,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -20,6 +21,7 @@ type PageWorkspaceProps = {
   page: PageDto | null;
   pagesLoading: boolean;
   savingPageId: number | null;
+  topbarContent?: ReactNode;
   onCreatePage: () => void;
   onSavePage: (pageId: number, payload: { title: string; content: string }) => Promise<void>;
 };
@@ -28,7 +30,10 @@ type PendingAction = (() => void) | null;
 type ConfirmDialog = { action: PendingAction } | null;
 
 export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>(
-  function PageWorkspace({ page, pagesLoading, savingPageId, onCreatePage, onSavePage }, ref) {
+  function PageWorkspace(
+    { page, pagesLoading, savingPageId, topbarContent, onCreatePage, onSavePage },
+    ref
+  ) {
     const { showToast } = useToast();
     const [titleDraft, setTitleDraft] = useState(page?.title ?? "");
     const [contentDraft, setContentDraft] = useState(page?.content ?? "");
@@ -246,6 +251,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
               <ChevronRight size={12} />
               <span>{page.title.trim() || "Untitled"}</span>
             </div>
+            <div className="workspace__topbar-center">{topbarContent}</div>
             <div className="workspace__actions">
               <div className="workspace__status">{isSaving ? "Saving..." : ""}</div>
               <button

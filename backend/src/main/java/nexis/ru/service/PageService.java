@@ -68,4 +68,13 @@ public class PageService {
                 .orElseThrow(() -> new EntityNotFoundException("Page not found"));
         pageRepository.delete(page);
     }
+
+    public List<PageDto> searchPages(String query) {
+        List<Page> pages = pageRepository
+        .findByTitleContainingIgnoreCaseOrContentContainingIgnoreCase(query, query);
+
+        return pages.stream()
+            .map(pageMapper::toDto)
+            .toList();
+    }
 }
