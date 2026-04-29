@@ -80,6 +80,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
     const isSaving = page ? savingPageId === page.id || isSavingRef.current : false;
     const isFavoriting = page ? favoritingPageId === page.id : false;
     const isExporting = page ? exportingPageId === page.id : false;
+    const editButtonTitle = isEditingContent ? "Save" : "Edit";
     const isContentDirty =
       Boolean(page) &&
       lastSyncedRef.current.pageId === page?.id &&
@@ -326,7 +327,12 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
         <div key={page.id} className="workspace">
           <div className="workspace__topbar">
             <div className="breadcrumb">
-              <button type="button" className="breadcrumb__home" onClick={handleHomeButtonClick}>
+              <button
+                type="button"
+                className="breadcrumb__home"
+                title="Home"
+                onClick={handleHomeButtonClick}
+              >
                 Nexis
               </button>
               <ChevronRight size={12} />
@@ -353,6 +359,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
                   type="button"
                   className="workspace__icon-button"
                   aria-label="Export markdown"
+                  title="Export Markdown"
                   disabled={isSaving || isExporting}
                   onClick={handleExportButtonClick}
                 >
@@ -363,6 +370,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
                 type="button"
                 className="workspace__icon-button"
                 aria-label={isEditingContent ? "Save page content" : "Edit page content"}
+                title={editButtonTitle}
                 disabled={isSaving}
                 onClick={handleEditButtonClick}
               >
@@ -411,6 +419,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
               <button
                 type="button"
                 className="markdown-empty"
+                title="Edit"
                 onClick={() => setIsEditingContent(true)}
               >
                 Start writing...
@@ -433,6 +442,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
                 <button
                   type="button"
                   className="ghost-button ghost-button--inline"
+                  title="Cancel"
                   onClick={() => discardContentChanges(confirmDialog.action)}
                 >
                   Cancel
@@ -440,6 +450,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
                 <button
                   type="button"
                   className="ghost-button ghost-button--inline"
+                  title="Save"
                   disabled={isSaving}
                   onClick={() => void saveContentChanges(confirmDialog.action)}
                 >
@@ -492,6 +503,7 @@ function HomeSection({
               key={page.id}
               type="button"
               className="home-page-card"
+              title={`Open ${page.title.trim() || "Untitled"}`}
               onClick={() => onOpenPage(page.id)}
             >
               <span className="home-page-card__icon" aria-hidden="true">

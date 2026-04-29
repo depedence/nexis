@@ -847,6 +847,7 @@ export function App() {
               <button
                 type="button"
                 className="ghost-button ghost-button--inline"
+                title="Cancel"
                 onClick={closeDeleteDialog}
               >
                 Cancel
@@ -854,6 +855,7 @@ export function App() {
               <button
                 type="button"
                 className="ghost-button ghost-button--inline ghost-button--danger"
+                title="Delete"
                 disabled={deletingPageId === deleteDialogPageId}
                 onClick={confirmDeletePage}
               >

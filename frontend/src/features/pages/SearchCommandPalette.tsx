@@ -166,6 +166,7 @@ export function SearchCommandPalette({ openRequestKey = 0, onOpenPage }: SearchC
         className="quick-search__trigger"
         aria-label="Open search"
         aria-expanded={isOpen}
+        title="Search"
         onClick={openPalette}
       >
         <Search size={13} />
@@ -196,6 +197,7 @@ export function SearchCommandPalette({ openRequestKey = 0, onOpenPage }: SearchC
                     className={`quick-search__result ${index === activeIndex ? "is-active" : ""}`}
                     role="option"
                     aria-selected={index === activeIndex}
+                    title={`Open ${page.title.trim() || "Untitled"}`}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => openResult(page)}
                   >
@@ -242,11 +244,27 @@ function getPreview(page: PageDto) {
     return "Collection";
   }
 
-  const content = page.content?.replace(/\s+/g, " ").trim();
+  const content = stripMarkdown(page.content ?? "");
 
   if (!content) {
     return "Page";
   }
 
   return content.length > 92 ? `${content.slice(0, 92)}...` : content;
+}
+
+function stripMarkdown(content: string) {
+  return content
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/[*_~>#-]+/g, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

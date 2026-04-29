@@ -83,6 +83,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               type="button"
               className="toast__close"
               aria-label="Dismiss notification"
+              title="Dismiss"
               onClick={() => {
                 setToasts((current) => current.filter((item) => item.id !== toast.id));
               }}

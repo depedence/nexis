@@ -433,6 +433,7 @@ export function Sidebar({
     const scope = options.scope ?? "pages";
     const showDelete = options.showDelete ?? true;
     const menuKey = `${scope}:${page.id}`;
+    const title = page.title.trim() || "Untitled";
 
     return (
       <div
@@ -446,17 +447,19 @@ export function Sidebar({
           type="button"
           className="sidebar__item-button"
           disabled={isExiting}
+          title={title}
           onClick={() => onSelectPage(page.id)}
         >
           <FileText size={14} />
-          <span>{page.title.trim() || "Untitled"}</span>
+          <span>{title}</span>
         </button>
         {renderPageActions(page, deletingPageId === page.id || isExiting, menuKey)}
         {showDelete ? (
           <button
             type="button"
             className="sidebar__item-delete"
-            aria-label={`Delete ${page.title.trim() || "Untitled"}`}
+            aria-label={`Delete ${title}`}
+            title="Delete"
             disabled={deletingPageId === page.id || isExiting}
             onClick={() => onDeletePage(page.id)}
           >
@@ -476,6 +479,7 @@ export function Sidebar({
     const isExiting = exitingPageIds.includes(page.id);
     const isEditingTitle = editingCollectionId === page.id;
     const isRenaming = savingPageId === page.id;
+    const title = page.title.trim() || "Untitled collection";
 
     return (
       <div key={page.id} className="sidebar__collection">
@@ -495,6 +499,7 @@ export function Sidebar({
                 value={collectionTitleDraft}
                 disabled={isRenaming}
                 aria-label="Collection title"
+                title="Rename collection"
                 onChange={(event) => setCollectionTitleDraft(event.target.value)}
                 onBlur={() => void commitCollectionRename(page)}
                 onKeyDown={(event) => {
@@ -517,21 +522,22 @@ export function Sidebar({
               className="sidebar__item-button sidebar__item-button--collection"
               aria-expanded={isExpanded}
               disabled={isExiting}
+              title={title}
               onClick={() => onToggleCollection(page.id)}
             >
               <span className={`sidebar__chevron ${isExpanded ? "is-expanded" : ""}`}>
                 <ChevronRight size={13} />
               </span>
               {isExpanded ? <FolderOpen size={14} /> : <Folder size={14} />}
-              <span>{page.title.trim() || "Untitled collection"}</span>
+              <span>{title}</span>
             </button>
           )}
           {!isEditingTitle ? (
             <button
               type="button"
               className="sidebar__item-rename"
-              aria-label={`Rename ${page.title.trim() || "Untitled collection"}`}
-              title="Rename collection"
+              aria-label={`Rename ${title}`}
+              title="Edit"
               disabled={isRenaming || deletingPageId === page.id || isExiting}
               onClick={() => startCollectionRename(page)}
             >
@@ -549,7 +555,8 @@ export function Sidebar({
             <button
               type="button"
               className="sidebar__item-delete"
-              aria-label={`Delete ${page.title.trim() || "Untitled collection"}`}
+              aria-label={`Delete ${title}`}
+              title="Delete"
               disabled={isRenaming || deletingPageId === page.id || isExiting}
               onClick={() => onDeletePage(page.id)}
             >
@@ -585,6 +592,7 @@ export function Sidebar({
                 className="sidebar__create-note"
                 style={getDepthStyle(depth + 1)}
                 disabled={creatingChildCollectionId === page.id}
+                title="Create note"
                 onClick={() => onCreateNoteInCollection(page.id)}
               >
                 <Plus size={13} />
@@ -628,10 +636,11 @@ export function Sidebar({
       <div key={`favorites-group:${collection.id}`} className="sidebar__collection">
         <div className="sidebar__item sidebar__item--collection" style={getDepthStyle(0)}>
           <button
-            type="button"
-            className="sidebar__item-button sidebar__item-button--collection"
-            aria-expanded={isExpanded}
-            onClick={() => toggleFavoriteCollection(collection.id)}
+          type="button"
+          className="sidebar__item-button sidebar__item-button--collection"
+          aria-expanded={isExpanded}
+          title={title}
+          onClick={() => toggleFavoriteCollection(collection.id)}
           >
             <span className={`sidebar__chevron ${isExpanded ? "is-expanded" : ""}`}>
               <ChevronRight size={13} />
@@ -671,6 +680,7 @@ export function Sidebar({
           aria-label={`Open actions for ${title}`}
           aria-haspopup="menu"
           aria-expanded={isMenuOpen}
+          title="Actions"
           disabled={isDisabled || isExporting || isFavoriting}
           onClick={(event) => toggleActionMenu(event, menuKey)}
         >
@@ -685,6 +695,7 @@ export function Sidebar({
                 role="menuitem"
                 className={page.favorite ? "is-favorite" : ""}
                 disabled={isFavoriting}
+                title={page.favorite ? "Remove from favorites" : "Add to favorites"}
                 onClick={(event) => toggleFavoriteFromMenu(event, page)}
               >
                 <Star size={13} fill={page.favorite ? "currentColor" : "none"} />
@@ -701,6 +712,7 @@ export function Sidebar({
               type="button"
               role="menuitem"
               disabled={isExporting}
+              title={exportLabel}
               onClick={(event) => exportSidebarPage(event, page)}
             >
               <Download size={13} />
@@ -711,6 +723,7 @@ export function Sidebar({
                 type="button"
                 role="menuitem"
                 disabled={isImportingMarkdown}
+                title="Import markdown"
                 onClick={(event) => openCollectionImportPicker(event, page.id)}
               >
                 <Upload size={13} />
@@ -820,13 +833,20 @@ export function Sidebar({
 
         {isCreateMenuOpen ? (
           <div className="sidebar__create-menu" role="menu" aria-label="Create page">
-            <button type="button" role="menuitem" disabled={isCreatingPage} onClick={createRootNote}>
+            <button
+              type="button"
+              role="menuitem"
+              title="Create note"
+              disabled={isCreatingPage}
+              onClick={createRootNote}
+            >
               <FileText size={14} />
               <span>Create note</span>
             </button>
             <button
               type="button"
               role="menuitem"
+              title="Create collection"
               disabled={isCreatingPage}
               onClick={createRootCollection}
             >
@@ -868,6 +888,7 @@ export function Sidebar({
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize sidebar"
+        title="Resize sidebar"
         onPointerDown={handleResizePointerDown}
       />
     </aside>
