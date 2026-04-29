@@ -13,4 +13,8 @@ public interface PageRepository extends JpaRepository<Page, Long> {
         String content
     );
 
+    List<Page> findByParentIdIsNullOrderByPositionAsc();
+
+    List<Page> findByParentIdOrderByPositionAsc(Long parentId);
+
 }

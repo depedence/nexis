@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, Search } from "lucide-react";
+import { FileText, Folder, Search } from "lucide-react";
 import type { PageDto } from "../../shared/types/page";
 import { searchPages } from "./pagesApi";
 
@@ -191,7 +191,7 @@ export function SearchCommandPalette({ onOpenPage }: SearchCommandPaletteProps) 
                     onClick={() => openResult(page)}
                   >
                     <span className="quick-search__result-icon">
-                      <FileText size={14} />
+                      {page.type === "COLLECTION" ? <Folder size={14} /> : <FileText size={14} />}
                     </span>
                     <span className="quick-search__result-copy">
                       <span className="quick-search__result-title">
@@ -229,6 +229,10 @@ function getMessage(status: SearchStatus, query: string) {
 }
 
 function getPreview(page: PageDto) {
+  if (page.type === "COLLECTION") {
+    return "Collection";
+  }
+
   const content = page.content?.replace(/\s+/g, " ").trim();
 
   if (!content) {

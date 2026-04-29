@@ -232,10 +232,10 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
       return (
         <main className="main main--empty">
           <div className="empty-state">
-            <p>Create your first page</p>
+            <p>Select or create a note</p>
             <button type="button" className="ghost-button" onClick={onCreatePage}>
               <Plus size={14} />
-              New page
+              Create note
             </button>
           </div>
         </main>

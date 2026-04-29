@@ -2,6 +2,7 @@ nexis\ru\exception\GlobalExceptionHandler.class
 nexis\ru\config\CorsConfig$1.class
 nexis\ru\mapper\PageMapperImpl.class
 nexis\ru\mapper\PageMapper.class
+nexis\ru\entity\PageType.class
 nexis\ru\service\PageService.class
 nexis\ru\entity\request\CreatePageRequest.class
 nexis\ru\entity\response\MessageResponse.class

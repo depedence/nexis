@@ -1,6 +1,7 @@
 package nexis.ru.entity.dto;
 
 import lombok.Data;
+import nexis.ru.entity.PageType;
 
 import java.time.LocalDateTime;
 
@@ -11,6 +12,7 @@ public class PageDto {
     Long parentId;
     String title;
     String content;
+    PageType type;
     int position;
     LocalDateTime createdAt;
     LocalDateTime updatedAt;

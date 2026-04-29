@@ -33,6 +33,16 @@ public class PageRestController {
         return pageService.searchPages(q);
     }
 
+    @GetMapping("/root")
+    public List<PageDto> getRootPages() {
+        return pageService.getRootPages();
+    }
+
+    @GetMapping("/{id}/children")
+    public List<PageDto> getChildrenPages(@PathVariable Long id) {
+        return pageService.getChildrenPages(id);
+    }
+
     @GetMapping("/{id}")
     public PageDto getPageById(@PathVariable Long id) {
         return pageService.getPageById(id);

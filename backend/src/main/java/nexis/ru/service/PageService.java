@@ -4,6 +4,7 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import nexis.ru.entity.Page;
+import nexis.ru.entity.PageType;
 import nexis.ru.entity.dto.PageDto;
 import nexis.ru.entity.request.CreatePageRequest;
 import nexis.ru.entity.request.UpdatePageRequest;
@@ -22,14 +23,33 @@ public class PageService {
     private final PageMapper pageMapper;
 
     public PageDto createPage(CreatePageRequest request) {
-        PageDto pageDto = new PageDto();
+        if (request.getType() == null) {
+            throw new IllegalArgumentException("Page type is required");
+        }
 
+        if (request.getParentId() != null) {
+            Page parent = pageRepository.findById(request.getParentId())
+                .orElseThrow(() -> new EntityNotFoundException("Parent not found"));
+
+            if (parent.getType() != PageType.COLLECTION) {
+                throw new IllegalArgumentException("Only collections can contain pages");
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        PageDto pageDto = new PageDto();
         pageDto.setParentId(request.getParentId());
         pageDto.setTitle(request.getTitle());
-        pageDto.setContent(request.getContent());
+        if (request.getType() == PageType.COLLECTION) {
+            pageDto.setContent(null);
+        } else {
+            pageDto.setContent(request.getContent() != null ? request.getContent() : "");
+        }
+        pageDto.setType(request.getType());
         pageDto.setPosition(request.getPosition());
-        pageDto.setCreatedAt(LocalDateTime.now());
-        pageDto.setUpdatedAt(LocalDateTime.now());
+        pageDto.setCreatedAt(now);
+        pageDto.setUpdatedAt(now);
 
         Page savedPage = pageRepository.save(pageMapper.toEntity(pageDto));
         return pageMapper.toDto(savedPage);
@@ -76,5 +96,19 @@ public class PageService {
         return pages.stream()
             .map(pageMapper::toDto)
             .toList();
+    }
+
+    public List<PageDto> getRootPages() {
+        return pageRepository.findByParentIdIsNullOrderByPositionAsc()
+                .stream()
+                .map(pageMapper::toDto)
+                .toList();
+    }
+
+    public List<PageDto> getChildrenPages(Long parentId) {
+        return pageRepository.findByParentIdOrderByPositionAsc(parentId)
+                .stream()
+                .map(pageMapper::toDto)
+                .toList();
     }
 }

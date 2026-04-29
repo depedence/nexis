@@ -2,6 +2,7 @@ C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\config\C
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\controller\PageRestController.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\dto\PageDto.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\Page.java
+C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\PageType.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\request\CreatePageRequest.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\request\UpdatePageRequest.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\response\ErrorResponse.java

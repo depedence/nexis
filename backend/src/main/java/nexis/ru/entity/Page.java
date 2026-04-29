@@ -28,6 +28,10 @@ public class Page {
     private String content;
 
     @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private PageType type;
+
+    @Column(nullable = false)
     private int position;
 
     @Column(name = "created_at", nullable = false)

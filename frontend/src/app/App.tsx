@@ -2,30 +2,53 @@ import { useEffect, useRef, useState } from "react";
 import { PageWorkspace, type PageWorkspaceHandle } from "../features/pages/PageWorkspace";
 import { SearchCommandPalette } from "../features/pages/SearchCommandPalette";
 import { Sidebar } from "../features/pages/Sidebar";
-import { createPage, deletePage, getPages, updatePage } from "../features/pages/pagesApi";
+import {
+  createPage,
+  deletePage,
+  getPage,
+  getPageChildren,
+  getRootPages,
+  updatePage
+} from "../features/pages/pagesApi";
 import { ApiError } from "../shared/api/apiClient";
-import type { PageDto } from "../shared/types/page";
+import type { PageDto, PageType } from "../shared/types/page";
 import { useToast } from "../shared/ui/ToastProvider";
+
+type ChildrenByCollectionId = Record<number, PageDto[]>;
+type PageById = Record<number, PageDto>;
 
 export function App() {
   const { showToast } = useToast();
-  const [pages, setPages] = useState<PageDto[]>([]);
+  const [rootPages, setRootPages] = useState<PageDto[]>([]);
+  const [childrenByCollectionId, setChildrenByCollectionId] =
+    useState<ChildrenByCollectionId>({});
+  const [pageById, setPageById] = useState<PageById>({});
   const [pagesLoading, setPagesLoading] = useState(true);
   const [selectedPageId, setSelectedPageId] = useState<number | null>(null);
   const [pagesError, setPagesError] = useState<string | null>(null);
+  const [expandedCollectionIds, setExpandedCollectionIds] = useState<number[]>([]);
+  const [loadingCollectionIds, setLoadingCollectionIds] = useState<number[]>([]);
+  const [childrenErrorByCollectionId, setChildrenErrorByCollectionId] = useState<
+    Record<number, string>
+  >({});
   const [isCreatingPage, setIsCreatingPage] = useState(false);
+  const [creatingChildCollectionId, setCreatingChildCollectionId] = useState<number | null>(null);
   const [savingPageId, setSavingPageId] = useState<number | null>(null);
   const [deletingPageId, setDeletingPageId] = useState<number | null>(null);
+  const [deleteDialogPageId, setDeleteDialogPageId] = useState<number | null>(null);
+  const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
   const [exitingPageIds, setExitingPageIds] = useState<number[]>([]);
   const selectedPageRef = useRef<number | null>(null);
   const workspaceRef = useRef<PageWorkspaceHandle | null>(null);
   const isCreatingPageRef = useRef(false);
 
-  const selectedPage = pages.find((page) => page.id === selectedPageId) ?? null;
+  const selectedPageCandidate =
+    selectedPageId === null ? null : pageById[selectedPageId] ?? null;
+  const selectedPage = selectedPageCandidate?.type === "NOTE" ? selectedPageCandidate : null;
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadPages(controller.signal);
+    void loadRootPages(controller.signal);
     return () => controller.abort();
   }, []);
 
@@ -40,22 +63,54 @@ export function App() {
     window.localStorage.setItem(SELECTED_PAGE_STORAGE_KEY, String(selectedPageId));
   }, [selectedPageId]);
 
-  async function loadPages(signal?: AbortSignal) {
+  useEffect(() => {
+    if (deleteDialogPageId === null) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      closeDeleteDialog();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [deleteDialogPageId, isDeleteDialogClosing]);
+
+  async function loadRootPages(signal?: AbortSignal) {
     setPagesLoading(true);
     setPagesError(null);
 
     try {
-      const nextPages = sortPages(await getPages(signal));
-      setPages(nextPages);
-      setSelectedPageId((current) => {
-        const preferredId = current ?? getStoredSelectedPageId();
+      const nextRootPages = sortPages(await getRootPages(signal));
 
-        if (preferredId !== null && nextPages.some((page) => page.id === preferredId)) {
-          return preferredId;
+      if (signal?.aborted) {
+        return;
+      }
+
+      setRootPages(nextRootPages);
+      setPageById((current) => mergePageList(current, nextRootPages));
+
+      const preferredId = selectedPageRef.current ?? getStoredSelectedPageId();
+
+      if (preferredId !== null) {
+        const preferredRootPage = nextRootPages.find((page) => page.id === preferredId);
+
+        if (preferredRootPage?.type === "NOTE") {
+          setSelectedPageId(preferredRootPage.id);
+          return;
         }
 
-        return nextPages[0]?.id ?? null;
-      });
+        if (!preferredRootPage && (await restoreSelectedNote(preferredId, signal))) {
+          return;
+        }
+      }
+
+      setSelectedPageId(getFirstNoteId(nextRootPages));
     } catch (error) {
       if (!signal?.aborted) {
         setPagesError(getErrorMessage(error, "Failed to load pages"));
@@ -66,11 +121,83 @@ export function App() {
         });
       }
     } finally {
-      setPagesLoading(false);
+      if (!signal?.aborted) {
+        setPagesLoading(false);
+      }
     }
   }
 
-  async function handleCreatePage() {
+  async function restoreSelectedNote(pageId: number, signal?: AbortSignal) {
+    try {
+      const page = await getPage(pageId, signal);
+
+      if (signal?.aborted || page.type !== "NOTE") {
+        return false;
+      }
+
+      mergeLoadedPage(page);
+
+      if (page.parentId !== null) {
+        expandCollection(page.parentId);
+        void loadCollectionChildren(page.parentId, signal);
+      }
+
+      setSelectedPageId(page.id);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function loadCollectionChildren(collectionId: number, signal?: AbortSignal, force = false) {
+    if (!force && childrenByCollectionId[collectionId] !== undefined) {
+      return;
+    }
+
+    setLoadingCollectionIds((current) => addUniqueId(current, collectionId));
+    setChildrenErrorByCollectionId((current) => omitRecordKey(current, collectionId));
+
+    try {
+      const children = sortPages(await getPageChildren(collectionId, signal));
+
+      if (signal?.aborted) {
+        return;
+      }
+
+      setChildrenByCollectionId((current) => ({
+        ...current,
+        [collectionId]: children
+      }));
+      setPageById((current) => mergePageList(current, children));
+    } catch (error) {
+      if (!signal?.aborted) {
+        const message = getErrorMessage(error, "Failed to load collection");
+        setChildrenErrorByCollectionId((current) => ({
+          ...current,
+          [collectionId]: message
+        }));
+        showToast({
+          title: "Collection error",
+          description: message,
+          variant: "error"
+        });
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setLoadingCollectionIds((current) => current.filter((id) => id !== collectionId));
+      }
+    }
+  }
+
+  async function handleCreateRootNote() {
+    await handleCreateRootPage("NOTE");
+  }
+
+  async function handleCreateRootCollection() {
+    await handleCreateRootPage("COLLECTION");
+  }
+
+  async function handleCreateRootPage(type: PageType) {
     if (isCreatingPageRef.current || isCreatingPage) {
       return;
     }
@@ -81,16 +208,28 @@ export function App() {
     try {
       const page = await createPage({
         parentId: null,
-        title: "Untitled",
-        content: "",
-        position: pages.length
+        title: type === "NOTE" ? "Untitled" : "Untitled collection",
+        content: type === "NOTE" ? "" : null,
+        type,
+        position: getNextPosition(rootPages)
       });
 
-      setPages((current) => sortPages([...current, page]));
-      setSelectedPageId(page.id);
+      mergeLoadedPage(page);
+
+      if (page.type === "NOTE") {
+        setSelectedPageId(page.id);
+      } else {
+        expandCollection(page.id);
+        setChildrenByCollectionId((current) => ({
+          ...current,
+          [page.id]: current[page.id] ?? []
+        }));
+      }
+
       showToast({
-        title: "Page created",
-        description: "New page is ready.",
+        title: page.type === "NOTE" ? "Note created" : "Collection created",
+        description:
+          page.type === "NOTE" ? "New note is ready." : "New collection is ready.",
         variant: "success"
       });
     } catch (error) {
@@ -105,32 +244,127 @@ export function App() {
     }
   }
 
+  async function handleCreateNoteInCollection(collectionId: number) {
+    if (creatingChildCollectionId !== null) {
+      return;
+    }
+
+    setCreatingChildCollectionId(collectionId);
+
+    try {
+      const existingChildren = childrenByCollectionId[collectionId] ?? [];
+      const page = await createPage({
+        parentId: collectionId,
+        title: "Untitled",
+        content: "",
+        type: "NOTE",
+        position: getNextPosition(existingChildren)
+      });
+
+      expandCollection(collectionId);
+      setChildrenByCollectionId((current) => ({
+        ...current,
+        [collectionId]: sortPages(upsertPage(current[collectionId] ?? [], page))
+      }));
+      setPageById((current) => mergePageList(current, [page]));
+      setSelectedPageId(page.id);
+      showToast({
+        title: "Note created",
+        description: "New note was added to the collection.",
+        variant: "success"
+      });
+    } catch (error) {
+      showToast({
+        title: "Create failed",
+        description: getErrorMessage(error, "Failed to create note"),
+        variant: "error"
+      });
+    } finally {
+      setCreatingChildCollectionId(null);
+    }
+  }
+
+  function handleRequestDeletePage(pageId: number) {
+    if (deletingPageId === pageId || exitingPageIds.includes(pageId)) {
+      return;
+    }
+
+    setDeleteDialogPageId(pageId);
+    setIsDeleteDialogClosing(false);
+  }
+
+  function closeDeleteDialog() {
+    if (deleteDialogPageId === null || isDeleteDialogClosing) {
+      return;
+    }
+
+    setIsDeleteDialogClosing(true);
+    window.setTimeout(() => {
+      setDeleteDialogPageId(null);
+      setIsDeleteDialogClosing(false);
+    }, CONFIRM_MODAL_EXIT_MS);
+  }
+
+  function confirmDeletePage() {
+    if (deleteDialogPageId === null || isDeleteDialogClosing) {
+      return;
+    }
+
+    const pageId = deleteDialogPageId;
+
+    setIsDeleteDialogClosing(true);
+    window.setTimeout(() => {
+      setDeleteDialogPageId(null);
+      setIsDeleteDialogClosing(false);
+      void handleDeletePage(pageId);
+    }, CONFIRM_MODAL_EXIT_MS);
+  }
+
   async function handleDeletePage(pageId: number) {
     if (deletingPageId === pageId || exitingPageIds.includes(pageId)) {
       return;
     }
 
-    const pageIndex = pages.findIndex((page) => page.id === pageId);
-    const nextSelectedPageId = getNextSelectedPageId(pages, pageId, pageIndex);
+    const page = pageById[pageId] ?? findPageInTree(rootPages, childrenByCollectionId, pageId);
+    const removedPageIds = collectCachedDescendantIds(pageId, pageById);
+    removedPageIds.add(pageId);
+
+    const isSelectedPageAffected =
+      selectedPageRef.current !== null && removedPageIds.has(selectedPageRef.current);
+    const nextSelectedPageId =
+      page?.type === "COLLECTION"
+        ? null
+        : getNextSelectedNoteId(rootPages, childrenByCollectionId, removedPageIds, pageId);
 
     setDeletingPageId(pageId);
 
     try {
       await deletePage(pageId);
-      setExitingPageIds((current) => [...current, pageId]);
+      setExitingPageIds((current) => addUniqueId(current, pageId));
 
-      if (selectedPageRef.current === pageId) {
+      if (isSelectedPageAffected) {
         setSelectedPageId(nextSelectedPageId);
       }
 
+      if (page?.type === "COLLECTION") {
+        setExpandedCollectionIds((current) => current.filter((id) => !removedPageIds.has(id)));
+      }
+
       window.setTimeout(() => {
-        setPages((current) => current.filter((page) => page.id !== pageId));
+        setRootPages((current) => current.filter((page) => !removedPageIds.has(page.id)));
+        setChildrenByCollectionId((current) =>
+          removePagesFromChildrenMap(current, removedPageIds)
+        );
+        setPageById((current) => removePagesFromCache(current, removedPageIds));
+        setChildrenErrorByCollectionId((current) => omitRecordKeys(current, removedPageIds));
+        setLoadingCollectionIds((current) => current.filter((id) => !removedPageIds.has(id)));
         setExitingPageIds((current) => current.filter((id) => id !== pageId));
       }, EXIT_ANIMATION_MS);
 
       showToast({
-        title: "Page deleted",
-        description: "The page was removed.",
+        title: page?.type === "COLLECTION" ? "Collection deleted" : "Note deleted",
+        description:
+          page?.type === "COLLECTION" ? "The collection was removed." : "The note was removed.",
         variant: "success"
       });
     } catch (error) {
@@ -145,12 +379,13 @@ export function App() {
   }
 
   async function handleSavePage(pageId: number, payload: { title: string; content: string }) {
-    const currentPage = pages.find((page) => page.id === pageId);
+    const currentPage = pageById[pageId];
     const normalizedTitle = payload.title.trim() || "Untitled";
     const normalizedContent = payload.content;
 
     if (
       !currentPage ||
+      currentPage.type !== "NOTE" ||
       (currentPage.title === normalizedTitle && (currentPage.content ?? "") === normalizedContent)
     ) {
       return;
@@ -163,9 +398,7 @@ export function App() {
         title: normalizedTitle,
         content: normalizedContent
       });
-      setPages((current) =>
-        sortPages(current.map((page) => (page.id === pageId ? updatedPage : page)))
-      );
+      mergeLoadedPage(updatedPage);
     } catch (error) {
       showToast({
         title: "Save failed",
@@ -178,6 +411,80 @@ export function App() {
     }
   }
 
+  async function handleRenameCollection(collectionId: number, title: string) {
+    const currentPage =
+      pageById[collectionId] ?? findPageInTree(rootPages, childrenByCollectionId, collectionId);
+    const normalizedTitle = title.trim() || "Untitled collection";
+
+    if (!currentPage || currentPage.type !== "COLLECTION" || currentPage.title === normalizedTitle) {
+      return;
+    }
+
+    setSavingPageId(collectionId);
+
+    try {
+      const updatedPage = await updatePage(collectionId, {
+        title: normalizedTitle,
+        content: null
+      });
+      mergeLoadedPage(updatedPage);
+    } catch (error) {
+      showToast({
+        title: "Rename failed",
+        description: getErrorMessage(error, "Failed to rename collection"),
+        variant: "error"
+      });
+      throw error;
+    } finally {
+      setSavingPageId(null);
+    }
+  }
+
+  function mergeLoadedPage(page: PageDto) {
+    setPageById((current) => mergePageList(current, [page]));
+
+    if (page.parentId === null) {
+      setRootPages((current) => sortPages(upsertPage(current, page)));
+      return;
+    }
+
+    const parentId = page.parentId;
+
+    setChildrenByCollectionId((current) => {
+      const currentChildren = current[parentId];
+
+      if (!currentChildren) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [parentId]: sortPages(upsertPage(currentChildren, page))
+      };
+    });
+  }
+
+  function handleToggleCollection(collectionId: number) {
+    if (expandedCollectionIds.includes(collectionId)) {
+      collapseCollection(collectionId);
+      return;
+    }
+
+    expandCollection(collectionId);
+
+    if (childrenByCollectionId[collectionId] === undefined) {
+      void loadCollectionChildren(collectionId);
+    }
+  }
+
+  function expandCollection(collectionId: number) {
+    setExpandedCollectionIds((current) => addUniqueId(current, collectionId));
+  }
+
+  function collapseCollection(collectionId: number) {
+    setExpandedCollectionIds((current) => current.filter((id) => id !== collectionId));
+  }
+
   function runWithUnsavedChangesGuard(action: () => void) {
     if (workspaceRef.current) {
       workspaceRef.current.runWithUnsavedChangesGuard(action);
@@ -188,8 +495,30 @@ export function App() {
   }
 
   function handleOpenSearchResult(page: PageDto) {
+    mergeLoadedPage(page);
+
+    if (page.type === "COLLECTION") {
+      if (page.parentId !== null) {
+        expandCollection(page.parentId);
+
+        if (childrenByCollectionId[page.parentId] === undefined) {
+          void loadCollectionChildren(page.parentId);
+        }
+      }
+
+      handleToggleCollection(page.id);
+      return;
+    }
+
     runWithUnsavedChangesGuard(() => {
-      setPages((current) => sortPages(upsertPage(current, page)));
+      if (page.parentId !== null) {
+        expandCollection(page.parentId);
+
+        if (childrenByCollectionId[page.parentId] === undefined) {
+          void loadCollectionChildren(page.parentId);
+        }
+      }
+
       setSelectedPageId(page.id);
     });
   }
@@ -197,22 +526,36 @@ export function App() {
   return (
     <div className="app-frame">
       <Sidebar
-        pages={pages}
+        pages={rootPages}
+        childrenByCollectionId={childrenByCollectionId}
+        expandedCollectionIds={expandedCollectionIds}
+        loadingCollectionIds={loadingCollectionIds}
+        childrenErrorByCollectionId={childrenErrorByCollectionId}
         selectedPageId={selectedPageId}
         isLoading={pagesLoading}
         errorMessage={pagesError}
         isCreatingPage={isCreatingPage}
+        creatingChildCollectionId={creatingChildCollectionId}
+        savingPageId={savingPageId}
         deletingPageId={deletingPageId}
         exitingPageIds={exitingPageIds}
-        onCreatePage={() => runWithUnsavedChangesGuard(() => void handleCreatePage())}
-        onDeletePage={(pageId) => runWithUnsavedChangesGuard(() => void handleDeletePage(pageId))}
+        onCreateRootNote={() => runWithUnsavedChangesGuard(() => void handleCreateRootNote())}
+        onCreateRootCollection={() => void handleCreateRootCollection()}
+        onCreateNoteInCollection={(collectionId) =>
+          runWithUnsavedChangesGuard(() => void handleCreateNoteInCollection(collectionId))
+        }
+        onDeletePage={(pageId) => runWithUnsavedChangesGuard(() => handleRequestDeletePage(pageId))}
+        onRenameCollection={handleRenameCollection}
         onSelectPage={(pageId) => {
-          if (pageId === selectedPageId) {
+          const page = pageById[pageId];
+
+          if (!page || page.type !== "NOTE" || pageId === selectedPageId) {
             return;
           }
 
           runWithUnsavedChangesGuard(() => setSelectedPageId(pageId));
         }}
+        onToggleCollection={handleToggleCollection}
       />
       <PageWorkspace
         ref={workspaceRef}
@@ -220,15 +563,49 @@ export function App() {
         pagesLoading={pagesLoading}
         savingPageId={savingPageId}
         topbarContent={<SearchCommandPalette onOpenPage={handleOpenSearchResult} />}
-        onCreatePage={() => runWithUnsavedChangesGuard(() => void handleCreatePage())}
+        onCreatePage={() => runWithUnsavedChangesGuard(() => void handleCreateRootNote())}
         onSavePage={handleSavePage}
       />
+      {deleteDialogPageId !== null ? (
+        <div
+          className={`confirm-modal ${isDeleteDialogClosing ? "is-leaving" : ""}`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-confirm-title"
+          aria-describedby="delete-confirm-description"
+        >
+          <div className="confirm-modal__panel">
+            <h2 id="delete-confirm-title">Delete item?</h2>
+            <p id="delete-confirm-description">
+              Are you sure you want to delete this item? This action cannot be undone.
+            </p>
+            <div className="confirm-modal__actions">
+              <button
+                type="button"
+                className="ghost-button ghost-button--inline"
+                onClick={closeDeleteDialog}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ghost-button ghost-button--inline ghost-button--danger"
+                disabled={deletingPageId === deleteDialogPageId}
+                onClick={confirmDeletePage}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 const SELECTED_PAGE_STORAGE_KEY = "nexis-selected-page-id";
 const EXIT_ANIMATION_MS = 180;
+const CONFIRM_MODAL_EXIT_MS = 160;
 
 function sortPages(pages: PageDto[]) {
   return [...pages].sort((left, right) => left.position - right.position || left.id - right.id);
@@ -240,6 +617,20 @@ function upsertPage(pages: PageDto[], nextPage: PageDto) {
   }
 
   return [...pages, nextPage];
+}
+
+function mergePageList(pageById: PageById, pages: PageDto[]) {
+  return pages.reduce<PageById>(
+    (nextPageById, page) => ({
+      ...nextPageById,
+      [page.id]: page
+    }),
+    pageById
+  );
+}
+
+function addUniqueId(ids: number[], nextId: number) {
+  return ids.includes(nextId) ? ids : [...ids, nextId];
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -261,16 +652,136 @@ function getStoredSelectedPageId() {
   return Number.isInteger(parsedValue) ? parsedValue : null;
 }
 
-function getNextSelectedPageId(pages: PageDto[], pageId: number, pageIndex: number) {
-  if (pageIndex === -1) {
-    return pages[0]?.id ?? null;
+function getNextPosition(pages: PageDto[]) {
+  if (pages.length === 0) {
+    return 0;
   }
 
-  const remainingPages = pages.filter((page) => page.id !== pageId);
+  return Math.max(...pages.map((page) => page.position)) + 1;
+}
 
-  if (remainingPages.length === 0) {
-    return null;
+function getFirstNoteId(pages: PageDto[]) {
+  return pages.find((page) => page.type === "NOTE")?.id ?? null;
+}
+
+function findPageInTree(
+  rootPages: PageDto[],
+  childrenByCollectionId: ChildrenByCollectionId,
+  pageId: number
+) {
+  return flattenPages(rootPages, childrenByCollectionId).find((page) => page.id === pageId) ?? null;
+}
+
+function flattenPages(rootPages: PageDto[], childrenByCollectionId: ChildrenByCollectionId) {
+  const flattenedPages: PageDto[] = [];
+
+  function appendPages(pages: PageDto[]) {
+    pages.forEach((page) => {
+      flattenedPages.push(page);
+
+      if (page.type === "COLLECTION") {
+        appendPages(childrenByCollectionId[page.id] ?? []);
+      }
+    });
   }
 
-  return remainingPages[pageIndex]?.id ?? remainingPages[pageIndex - 1]?.id ?? remainingPages[0]?.id ?? null;
+  appendPages(rootPages);
+  return flattenedPages;
+}
+
+function collectCachedDescendantIds(pageId: number, pageById: PageById) {
+  const removedPageIds = new Set<number>();
+  let didAddPage = true;
+
+  while (didAddPage) {
+    didAddPage = false;
+
+    Object.values(pageById).forEach((page) => {
+      if (page.parentId !== null && (page.parentId === pageId || removedPageIds.has(page.parentId))) {
+        if (!removedPageIds.has(page.id)) {
+          removedPageIds.add(page.id);
+          didAddPage = true;
+        }
+      }
+    });
+  }
+
+  return removedPageIds;
+}
+
+function getNextSelectedNoteId(
+  rootPages: PageDto[],
+  childrenByCollectionId: ChildrenByCollectionId,
+  removedPageIds: Set<number>,
+  anchorPageId: number
+) {
+  const visiblePages = flattenPages(rootPages, childrenByCollectionId);
+  const anchorIndex = visiblePages.findIndex((page) => page.id === anchorPageId);
+  const isCandidate = (page: PageDto) =>
+    page.type === "NOTE" && !removedPageIds.has(page.id);
+
+  if (anchorIndex === -1) {
+    return visiblePages.find(isCandidate)?.id ?? null;
+  }
+
+  const nextPage = visiblePages.slice(anchorIndex + 1).find(isCandidate);
+
+  if (nextPage) {
+    return nextPage.id;
+  }
+
+  return [...visiblePages.slice(0, anchorIndex)].reverse().find(isCandidate)?.id ?? null;
+}
+
+function removePagesFromChildrenMap(
+  childrenByCollectionId: ChildrenByCollectionId,
+  removedPageIds: Set<number>
+) {
+  return Object.entries(childrenByCollectionId).reduce<ChildrenByCollectionId>(
+    (nextChildrenByCollectionId, [collectionId, children]) => {
+      const numericCollectionId = Number(collectionId);
+
+      if (removedPageIds.has(numericCollectionId)) {
+        return nextChildrenByCollectionId;
+      }
+
+      return {
+        ...nextChildrenByCollectionId,
+        [numericCollectionId]: children.filter((page) => !removedPageIds.has(page.id))
+      };
+    },
+    {}
+  );
+}
+
+function removePagesFromCache(pageById: PageById, removedPageIds: Set<number>) {
+  return Object.entries(pageById).reduce<PageById>((nextPageById, [pageId, page]) => {
+    if (removedPageIds.has(Number(pageId))) {
+      return nextPageById;
+    }
+
+    return {
+      ...nextPageById,
+      [page.id]: page
+    };
+  }, {});
+}
+
+function omitRecordKey<T>(record: Record<number, T>, key: number) {
+  return omitRecordKeys(record, new Set([key]));
+}
+
+function omitRecordKeys<T>(record: Record<number, T>, keys: Set<number>) {
+  return Object.entries(record).reduce<Record<number, T>>((nextRecord, [key, value]) => {
+    const numericKey = Number(key);
+
+    if (keys.has(numericKey)) {
+      return nextRecord;
+    }
+
+    return {
+      ...nextRecord,
+      [numericKey]: value
+    };
+  }, {});
 }
