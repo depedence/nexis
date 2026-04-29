@@ -8,7 +8,7 @@ import {
   useState
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { Check, ChevronRight, Edit3, Plus } from "lucide-react";
+import { Check, ChevronRight, Edit3, FileDown, Plus } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import type { PageDto } from "../../shared/types/page";
 import { useToast } from "../../shared/ui/ToastProvider";
@@ -21,8 +21,10 @@ type PageWorkspaceProps = {
   page: PageDto | null;
   pagesLoading: boolean;
   savingPageId: number | null;
+  exportingPageId: number | null;
   topbarContent?: ReactNode;
   onCreatePage: () => void;
+  onExportPage: (page: PageDto) => void;
   onSavePage: (pageId: number, payload: { title: string; content: string }) => Promise<void>;
 };
 
@@ -31,7 +33,16 @@ type ConfirmDialog = { action: PendingAction } | null;
 
 export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>(
   function PageWorkspace(
-    { page, pagesLoading, savingPageId, topbarContent, onCreatePage, onSavePage },
+    {
+      page,
+      pagesLoading,
+      savingPageId,
+      exportingPageId,
+      topbarContent,
+      onCreatePage,
+      onExportPage,
+      onSavePage
+    },
     ref
   ) {
     const { showToast } = useToast();
@@ -49,6 +60,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
     });
 
     const isSaving = page ? savingPageId === page.id || isSavingRef.current : false;
+    const isExporting = page ? exportingPageId === page.id : false;
     const isContentDirty =
       Boolean(page) &&
       lastSyncedRef.current.pageId === page?.id &&
@@ -218,6 +230,17 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
       void saveContentChanges();
     }
 
+    function handleExportButtonClick() {
+      if (!page || isSaving || isExporting) {
+        return;
+      }
+
+      onExportPage({
+        ...page,
+        title: titleDraft.trim() || "Untitled"
+      });
+    }
+
     if (pagesLoading && !page) {
       return (
         <main className="main main--empty">
@@ -254,6 +277,17 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
             <div className="workspace__topbar-center">{topbarContent}</div>
             <div className="workspace__actions">
               <div className="workspace__status">{isSaving ? "Saving..." : ""}</div>
+              {!isEditingContent ? (
+                <button
+                  type="button"
+                  className="workspace__icon-button"
+                  aria-label="Export markdown"
+                  disabled={isSaving || isExporting}
+                  onClick={handleExportButtonClick}
+                >
+                  <FileDown size={15} />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="workspace__icon-button"

@@ -1,15 +1,17 @@
 import {
   ChevronRight,
+  Download,
   FileText,
   Folder,
   FolderOpen,
+  MoreHorizontal,
   Moon,
   Pencil,
   Plus,
   Sun,
   Trash2
 } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import type { PageDto } from "../../shared/types/page";
 import { useTheme } from "../../shared/ui/ThemeProvider";
 
@@ -26,11 +28,13 @@ type SidebarProps = {
   creatingChildCollectionId: number | null;
   savingPageId: number | null;
   deletingPageId: number | null;
+  exportingPageId: number | null;
   exitingPageIds: number[];
   onCreateRootNote: () => void;
   onCreateRootCollection: () => void;
   onCreateNoteInCollection: (collectionId: number) => void;
   onDeletePage: (pageId: number) => void;
+  onExportPage: (page: PageDto) => void;
   onRenameCollection: (collectionId: number, title: string) => Promise<void>;
   onSelectPage: (pageId: number) => void;
   onToggleCollection: (collectionId: number) => void;
@@ -53,20 +57,24 @@ export function Sidebar({
   creatingChildCollectionId,
   savingPageId,
   deletingPageId,
+  exportingPageId,
   exitingPageIds,
   onCreateRootNote,
   onCreateRootCollection,
   onCreateNoteInCollection,
   onDeletePage,
+  onExportPage,
   onRenameCollection,
   onSelectPage,
   onToggleCollection
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
+  const [openExportMenuPageId, setOpenExportMenuPageId] = useState<number | null>(null);
   const [editingCollectionId, setEditingCollectionId] = useState<number | null>(null);
   const [collectionTitleDraft, setCollectionTitleDraft] = useState("");
   const createMenuRef = useRef<HTMLDivElement | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const collectionTitleInputRef = useRef<HTMLInputElement | null>(null);
   const isCommittingCollectionRenameRef = useRef(false);
 
@@ -88,6 +96,43 @@ export function Sidebar({
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [isCreateMenuOpen]);
+
+  useEffect(() => {
+    if (openExportMenuPageId === null) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+
+      if (target instanceof Node && exportMenuRef.current?.contains(target)) {
+        return;
+      }
+
+      setOpenExportMenuPageId(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [openExportMenuPageId]);
+
+  useEffect(() => {
+    if (openExportMenuPageId === null) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      setOpenExportMenuPageId(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [openExportMenuPageId]);
 
   useEffect(() => {
     if (editingCollectionId === null) {
@@ -150,6 +195,19 @@ export function Sidebar({
     }
   }
 
+  function toggleExportMenu(event: MouseEvent<HTMLButtonElement>, pageId: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    setOpenExportMenuPageId((current) => (current === pageId ? null : pageId));
+  }
+
+  function exportSidebarPage(event: MouseEvent<HTMLButtonElement>, page: PageDto) {
+    event.preventDefault();
+    event.stopPropagation();
+    setOpenExportMenuPageId(null);
+    onExportPage(page);
+  }
+
   function renderPage(page: PageDto, depth: number) {
     if (page.type === "COLLECTION") {
       return renderCollection(page, depth);
@@ -178,6 +236,7 @@ export function Sidebar({
           <FileText size={14} />
           <span>{page.title.trim() || "Untitled"}</span>
         </button>
+        {renderExportAction(page, deletingPageId === page.id || isExiting)}
         <button
           type="button"
           className="sidebar__item-delete"
@@ -262,6 +321,9 @@ export function Sidebar({
               <Pencil size={13} />
             </button>
           ) : null}
+          {!isEditingTitle
+            ? renderExportAction(page, isRenaming || deletingPageId === page.id || isExiting)
+            : null}
           {!isEditingTitle ? (
             <button
               type="button"
@@ -310,6 +372,48 @@ export function Sidebar({
                 </span>
               </button>
             ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderExportAction(page: PageDto, isDisabled: boolean) {
+    const isMenuOpen = openExportMenuPageId === page.id;
+    const isExporting = exportingPageId === page.id;
+    const title =
+      page.title.trim() || (page.type === "COLLECTION" ? "Untitled collection" : "Untitled");
+    const exportLabel = page.type === "COLLECTION" ? "Export zip" : "Export markdown";
+
+    return (
+      <div
+        ref={isMenuOpen ? exportMenuRef : undefined}
+        className="sidebar__item-menu-wrap"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="sidebar__item-more"
+          aria-label={`Open actions for ${title}`}
+          aria-haspopup="menu"
+          aria-expanded={isMenuOpen}
+          disabled={isDisabled || isExporting}
+          onClick={(event) => toggleExportMenu(event, page.id)}
+        >
+          <MoreHorizontal size={14} />
+        </button>
+
+        {isMenuOpen ? (
+          <div className="sidebar__item-menu" role="menu" aria-label={`${title} actions`}>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={isExporting}
+              onClick={(event) => exportSidebarPage(event, page)}
+            >
+              <Download size={13} />
+              <span>{isExporting ? "Exporting..." : exportLabel}</span>
+            </button>
           </div>
         ) : null}
       </div>

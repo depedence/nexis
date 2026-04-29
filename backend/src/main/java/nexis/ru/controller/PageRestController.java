@@ -4,11 +4,16 @@ import lombok.RequiredArgsConstructor;
 import nexis.ru.entity.dto.PageDto;
 import nexis.ru.entity.request.CreatePageRequest;
 import nexis.ru.entity.request.UpdatePageRequest;
+import nexis.ru.entity.response.ExportFileResponse;
 import nexis.ru.entity.response.MessageResponse;
 import nexis.ru.service.PageService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -57,5 +62,17 @@ public class PageRestController {
     public ResponseEntity<MessageResponse> deletePage(@PathVariable Long id) {
         pageService.deletePage(id);
         return ResponseEntity.ok(new MessageResponse("Page successfully deleted"));
+    }
+
+    @GetMapping("/{id}/export")
+    public ResponseEntity<byte[]> exportPage(@PathVariable Long id) {
+        ExportFileResponse file = pageService.exportPage(id);
+        return ResponseEntity.ok()
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename*=UTF-8''" + URLEncoder.encode(file.filename(), StandardCharsets.UTF_8)
+                )
+                .contentType(MediaType.parseMediaType(file.contentType()))
+                .body(file.bytes());
     }
 }

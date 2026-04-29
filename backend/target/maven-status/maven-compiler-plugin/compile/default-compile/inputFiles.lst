@@ -6,6 +6,7 @@ C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\P
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\request\CreatePageRequest.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\request\UpdatePageRequest.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\response\ErrorResponse.java
+C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\response\ExportFileResponse.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\entity\response\MessageResponse.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\exception\GlobalExceptionHandler.java
 C:\Users\a.averin\Desktop\Practice\nexis\backend\src\main\java\nexis\ru\mapper\PageMapper.java

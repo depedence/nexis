@@ -8,12 +8,18 @@ import nexis.ru.entity.PageType;
 import nexis.ru.entity.dto.PageDto;
 import nexis.ru.entity.request.CreatePageRequest;
 import nexis.ru.entity.request.UpdatePageRequest;
+import nexis.ru.entity.response.ExportFileResponse;
 import nexis.ru.mapper.PageMapper;
 import nexis.ru.repository.PageRepository;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 @RequiredArgsConstructor
@@ -110,5 +116,74 @@ public class PageService {
                 .stream()
                 .map(pageMapper::toDto)
                 .toList();
+    }
+
+    public ExportFileResponse exportPage(Long id) {
+        Page page = pageRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Page not found"));
+
+        if (page.getType() == PageType.NOTE) {
+            return exportNote(page);
+        }
+
+        if (page.getType() == PageType.COLLECTION) {
+            return exportCollection(page);
+        }
+
+        throw new IllegalArgumentException("Unsupported page type");
+    }
+
+    private ExportFileResponse exportNote(Page page) {
+        String filename = sanitizeFilename(page.getTitle()) + ".md";
+
+        String markdown = "# " + page.getTitle() + "\n\n" +
+                (page.getContent() != null ? page.getContent() : "");
+
+        return new ExportFileResponse(
+                filename,
+                "application/octet-stream",
+                markdown.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private ExportFileResponse exportCollection(Page collection) {
+        List<Page> children = pageRepository.findByParentIdOrderByPositionAsc(collection.getId());
+
+        try {
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+            ZipOutputStream zipOutputStream = new ZipOutputStream(byteArrayOutputStream);
+
+            for (Page child : children) {
+                if (child.getType() != PageType.NOTE) {
+                    continue;
+                }
+
+                String filename = sanitizeFilename(child.getTitle()) + ".md";
+
+                String markdown = "# " + child.getTitle() + "\n\n" +
+                        (child.getContent() != null ? child.getContent() : "");
+
+                ZipEntry entry = new ZipEntry(filename);
+                zipOutputStream.putNextEntry(entry);
+                zipOutputStream.write(markdown.getBytes(StandardCharsets.UTF_8));
+                zipOutputStream.closeEntry();
+            }
+
+            zipOutputStream.close();
+
+            return new ExportFileResponse(
+                    sanitizeFilename(collection.getTitle()) + ".zip",
+                    "application/zip",
+                    byteArrayOutputStream.toByteArray()
+            );
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to export collection", e);
+        }
+    }
+
+    private String sanitizeFilename(String filename) {
+        return filename
+                .replaceAll("[\\\\/:*?\"<>|]", "_")
+                .trim();
     }
 }

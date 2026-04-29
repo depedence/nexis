@@ -13,4 +13,5 @@ nexis\ru\entity\request\UpdatePageRequest.class
 nexis\ru\controller\PageRestController.class
 nexis\ru\entity\dto\PageDto.class
 nexis\ru\repository\PageRepository.class
+nexis\ru\entity\response\ExportFileResponse.class
 nexis\ru\NexisApplication.class

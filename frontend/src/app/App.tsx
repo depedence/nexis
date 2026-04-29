@@ -5,6 +5,7 @@ import { Sidebar } from "../features/pages/Sidebar";
 import {
   createPage,
   deletePage,
+  exportPage,
   getPage,
   getPageChildren,
   getRootPages,
@@ -35,6 +36,7 @@ export function App() {
   const [creatingChildCollectionId, setCreatingChildCollectionId] = useState<number | null>(null);
   const [savingPageId, setSavingPageId] = useState<number | null>(null);
   const [deletingPageId, setDeletingPageId] = useState<number | null>(null);
+  const [exportingPageId, setExportingPageId] = useState<number | null>(null);
   const [deleteDialogPageId, setDeleteDialogPageId] = useState<number | null>(null);
   const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
   const [exitingPageIds, setExitingPageIds] = useState<number[]>([]);
@@ -440,6 +442,36 @@ export function App() {
     }
   }
 
+  async function handleExportPage(page: PageDto) {
+    if (
+      exportingPageId !== null ||
+      deletingPageId === page.id ||
+      exitingPageIds.includes(page.id)
+    ) {
+      return;
+    }
+
+    setExportingPageId(page.id);
+
+    try {
+      await exportPage(page.id, page);
+      showToast({
+        title: page.type === "COLLECTION" ? "Collection exported" : "Note exported",
+        description:
+          page.type === "COLLECTION" ? "ZIP download is ready." : "Markdown download is ready.",
+        variant: "success"
+      });
+    } catch (error) {
+      showToast({
+        title: "Export failed",
+        description: getErrorMessage(error, "Failed to export page"),
+        variant: "error"
+      });
+    } finally {
+      setExportingPageId(null);
+    }
+  }
+
   function mergeLoadedPage(page: PageDto) {
     setPageById((current) => mergePageList(current, [page]));
 
@@ -538,6 +570,7 @@ export function App() {
         creatingChildCollectionId={creatingChildCollectionId}
         savingPageId={savingPageId}
         deletingPageId={deletingPageId}
+        exportingPageId={exportingPageId}
         exitingPageIds={exitingPageIds}
         onCreateRootNote={() => runWithUnsavedChangesGuard(() => void handleCreateRootNote())}
         onCreateRootCollection={() => void handleCreateRootCollection()}
@@ -545,6 +578,7 @@ export function App() {
           runWithUnsavedChangesGuard(() => void handleCreateNoteInCollection(collectionId))
         }
         onDeletePage={(pageId) => runWithUnsavedChangesGuard(() => handleRequestDeletePage(pageId))}
+        onExportPage={(page) => void handleExportPage(page)}
         onRenameCollection={handleRenameCollection}
         onSelectPage={(pageId) => {
           const page = pageById[pageId];
@@ -562,8 +596,10 @@ export function App() {
         page={selectedPage}
         pagesLoading={pagesLoading}
         savingPageId={savingPageId}
+        exportingPageId={exportingPageId}
         topbarContent={<SearchCommandPalette onOpenPage={handleOpenSearchResult} />}
         onCreatePage={() => runWithUnsavedChangesGuard(() => void handleCreateRootNote())}
+        onExportPage={(page) => void handleExportPage(page)}
         onSavePage={handleSavePage}
       />
       {deleteDialogPageId !== null ? (
