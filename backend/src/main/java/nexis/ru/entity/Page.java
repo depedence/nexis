@@ -34,6 +34,9 @@ public class Page {
     @Column(nullable = false)
     private int position;
 
+    @Column(nullable = false)
+    private boolean favorite = false;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 
 @Generated(
     value = "org.mapstruct.ap.MappingProcessor",
-    date = "2026-04-29T10:58:24+0300",
+    date = "2026-04-29T15:51:54+0300",
     comments = "version: 1.5.5.Final, compiler: javac, environment: Java 17.0.16 (Microsoft)"
 )
 @Component
@@ -27,6 +27,7 @@ public class PageMapperImpl implements PageMapper {
         pageDto.setContent( page.getContent() );
         pageDto.setType( page.getType() );
         pageDto.setPosition( page.getPosition() );
+        pageDto.setFavorite( page.isFavorite() );
         pageDto.setCreatedAt( page.getCreatedAt() );
         pageDto.setUpdatedAt( page.getUpdatedAt() );
 
@@ -47,6 +48,7 @@ public class PageMapperImpl implements PageMapper {
         page.setContent( pageDto.getContent() );
         page.setType( pageDto.getType() );
         page.setPosition( pageDto.getPosition() );
+        page.setFavorite( pageDto.isFavorite() );
         page.setCreatedAt( pageDto.getCreatedAt() );
         page.setUpdatedAt( pageDto.getUpdatedAt() );
 

@@ -1,6 +1,11 @@
-import { apiClient } from "../../shared/api/apiClient";
+import { ApiError, apiClient } from "../../shared/api/apiClient";
 import { API_BASE_URL } from "../../shared/api/config";
-import type { CreatePageRequest, PageDto, UpdatePageRequest } from "../../shared/types/page";
+import type {
+  CreatePageRequest,
+  PageDto,
+  SetFavoriteRequest,
+  UpdatePageRequest
+} from "../../shared/types/page";
 
 type ExportPageFallback = Pick<PageDto, "title" | "type">;
 
@@ -14,6 +19,10 @@ export function getPageChildren(pageId: number, signal?: AbortSignal) {
 
 export function getPage(pageId: number, signal?: AbortSignal) {
   return apiClient<PageDto>(`/pages/${pageId}`, { signal });
+}
+
+export function getFavoritePages(signal?: AbortSignal) {
+  return apiClient<PageDto[]>("/pages/favorites", { signal });
 }
 
 export function searchPages(query: string, signal?: AbortSignal) {
@@ -34,10 +43,41 @@ export function updatePage(pageId: number, payload: UpdatePageRequest) {
   });
 }
 
+export function setPageFavorite(pageId: number, payload: SetFavoriteRequest) {
+  return apiClient<PageDto>(`/pages/${pageId}/favorite`, {
+    method: "PATCH",
+    body: payload
+  });
+}
+
 export function deletePage(pageId: number) {
   return apiClient<void>(`/pages/${pageId}`, {
     method: "DELETE"
   });
+}
+
+export async function importMarkdown(file: File, parentId?: number): Promise<PageDto> {
+  const formData = new FormData();
+
+  formData.append("file", file);
+
+  if (parentId !== undefined) {
+    formData.append("parentId", String(parentId));
+  }
+
+  const response = await fetch(`${API_BASE_URL}/pages/import/markdown`, {
+    method: "POST",
+    body: formData
+  });
+
+  if (!response.ok) {
+    throw new ApiError(
+      await readApiError(response, `Import failed with status ${response.status}`),
+      response.status
+    );
+  }
+
+  return (await response.json()) as PageDto;
 }
 
 export async function exportPage(
@@ -47,7 +87,7 @@ export async function exportPage(
   const response = await fetch(`${API_BASE_URL}/pages/${pageId}/export`);
 
   if (!response.ok) {
-    throw new Error(await readExportError(response));
+    throw new Error(await readApiError(response, `Export failed with status ${response.status}`));
   }
 
   const blob = await response.blob();
@@ -68,12 +108,12 @@ async function readFallbackPage(pageId: number) {
   }
 }
 
-async function readExportError(response: Response) {
+async function readApiError(response: Response, fallback: string) {
   try {
     const payload = (await response.json()) as { message?: string; error?: string };
-    return payload.message ?? payload.error ?? `Export failed with status ${response.status}`;
+    return payload.message ?? payload.error ?? fallback;
   } catch {
-    return `Export failed with status ${response.status}`;
+    return fallback;
   }
 }
 

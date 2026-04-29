@@ -3,6 +3,7 @@ package nexis.ru.controller;
 import lombok.RequiredArgsConstructor;
 import nexis.ru.entity.dto.PageDto;
 import nexis.ru.entity.request.CreatePageRequest;
+import nexis.ru.entity.request.SetFavoriteRequest;
 import nexis.ru.entity.request.UpdatePageRequest;
 import nexis.ru.entity.response.ExportFileResponse;
 import nexis.ru.entity.response.MessageResponse;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -41,6 +43,27 @@ public class PageRestController {
     @GetMapping("/root")
     public List<PageDto> getRootPages() {
         return pageService.getRootPages();
+    }
+
+    @PostMapping("/import/markdown")
+    public PageDto importMarkdown(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) Long parentId
+    ) {
+        return pageService.importMarkdown(file, parentId);
+    }
+
+    @GetMapping("/favorites")
+    public List<PageDto> getFavoritePages() {
+        return pageService.getFavoritePages();
+    }
+
+    @PatchMapping("/{id}/favorite")
+    public PageDto setFavorite(
+            @PathVariable Long id,
+            @RequestBody SetFavoriteRequest request
+    ) {
+        return pageService.setFavorite(id, request);
     }
 
     @GetMapping("/{id}/children")

@@ -14,6 +14,7 @@ public class PageDto {
     String content;
     PageType type;
     int position;
+    boolean favorite;
     LocalDateTime createdAt;
     LocalDateTime updatedAt;
 

@@ -1,6 +1,7 @@
 package nexis.ru.repository;
 
 import nexis.ru.entity.Page;
+import nexis.ru.entity.PageType;
 
 import java.util.List;
 
@@ -16,5 +17,7 @@ public interface PageRepository extends JpaRepository<Page, Long> {
     List<Page> findByParentIdIsNullOrderByPositionAsc();
 
     List<Page> findByParentIdOrderByPositionAsc(Long parentId);
+
+    List<Page> findByTypeAndFavoriteTrueOrderByUpdatedAtDesc(PageType type);
 
 }

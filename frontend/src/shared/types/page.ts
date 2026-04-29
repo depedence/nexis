@@ -6,6 +6,7 @@ export type PageDto = {
   title: string;
   content: string | null;
   type: PageType;
+  favorite: boolean;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -22,4 +23,8 @@ export type CreatePageRequest = {
 export type UpdatePageRequest = {
   title: string;
   content: string | null;
+};
+
+export type SetFavoriteRequest = {
+  favorite: boolean;
 };

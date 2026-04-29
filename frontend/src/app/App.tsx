@@ -6,9 +6,12 @@ import {
   createPage,
   deletePage,
   exportPage,
+  getFavoritePages,
   getPage,
   getPageChildren,
   getRootPages,
+  importMarkdown,
+  setPageFavorite,
   updatePage
 } from "../features/pages/pagesApi";
 import { ApiError } from "../shared/api/apiClient";
@@ -17,10 +20,12 @@ import { useToast } from "../shared/ui/ToastProvider";
 
 type ChildrenByCollectionId = Record<number, PageDto[]>;
 type PageById = Record<number, PageDto>;
+type ImportingMarkdownTarget = "root" | number | null;
 
 export function App() {
   const { showToast } = useToast();
   const [rootPages, setRootPages] = useState<PageDto[]>([]);
+  const [favoritePages, setFavoritePages] = useState<PageDto[]>([]);
   const [childrenByCollectionId, setChildrenByCollectionId] =
     useState<ChildrenByCollectionId>({});
   const [pageById, setPageById] = useState<PageById>({});
@@ -35,22 +40,28 @@ export function App() {
   const [isCreatingPage, setIsCreatingPage] = useState(false);
   const [creatingChildCollectionId, setCreatingChildCollectionId] = useState<number | null>(null);
   const [savingPageId, setSavingPageId] = useState<number | null>(null);
+  const [favoritingPageId, setFavoritingPageId] = useState<number | null>(null);
   const [deletingPageId, setDeletingPageId] = useState<number | null>(null);
   const [exportingPageId, setExportingPageId] = useState<number | null>(null);
+  const [importingMarkdownTarget, setImportingMarkdownTarget] =
+    useState<ImportingMarkdownTarget>(null);
   const [deleteDialogPageId, setDeleteDialogPageId] = useState<number | null>(null);
   const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
   const [exitingPageIds, setExitingPageIds] = useState<number[]>([]);
   const selectedPageRef = useRef<number | null>(null);
   const workspaceRef = useRef<PageWorkspaceHandle | null>(null);
   const isCreatingPageRef = useRef(false);
+  const isImportingMarkdownRef = useRef(false);
 
   const selectedPageCandidate =
     selectedPageId === null ? null : pageById[selectedPageId] ?? null;
   const selectedPage = selectedPageCandidate?.type === "NOTE" ? selectedPageCandidate : null;
+  const isImportingMarkdown = importingMarkdownTarget !== null;
 
   useEffect(() => {
     const controller = new AbortController();
     void loadRootPages(controller.signal);
+    void loadFavoritePages(controller.signal);
     return () => controller.abort();
   }, []);
 
@@ -125,6 +136,29 @@ export function App() {
     } finally {
       if (!signal?.aborted) {
         setPagesLoading(false);
+      }
+    }
+  }
+
+  async function loadFavoritePages(signal?: AbortSignal) {
+    try {
+      const nextFavoritePages = sortPages(await getFavoritePages(signal)).filter(
+        (page) => page.type === "NOTE" && page.favorite
+      );
+
+      if (signal?.aborted) {
+        return;
+      }
+
+      setFavoritePages(nextFavoritePages);
+      setPageById((current) => mergePageList(current, nextFavoritePages));
+    } catch (error) {
+      if (!signal?.aborted) {
+        showToast({
+          title: "Favorites error",
+          description: getErrorMessage(error, "Failed to load favorites"),
+          variant: "error"
+        });
       }
     }
   }
@@ -286,6 +320,68 @@ export function App() {
     }
   }
 
+  function handleImportRootMarkdown(file: File) {
+    runWithUnsavedChangesGuard(() => void handleImportMarkdownFile(file));
+  }
+
+  function handleImportMarkdownToCollection(collectionId: number, file: File) {
+    runWithUnsavedChangesGuard(() => void handleImportMarkdownFile(file, collectionId));
+  }
+
+  async function handleImportMarkdownFile(file: File, parentId?: number) {
+    if (!isMarkdownFile(file)) {
+      showToast({
+        title: "Only .md files are supported",
+        description: "Choose a Markdown file to import.",
+        variant: "error"
+      });
+      return;
+    }
+
+    if (isImportingMarkdownRef.current) {
+      return;
+    }
+
+    isImportingMarkdownRef.current = true;
+    setImportingMarkdownTarget(parentId ?? "root");
+
+    try {
+      const page = await importMarkdown(file, parentId);
+
+      mergeLoadedPage(page);
+
+      if (page.parentId !== null) {
+        const importedParentId = page.parentId;
+
+        expandCollection(importedParentId);
+        setChildrenByCollectionId((current) => ({
+          ...current,
+          [importedParentId]: sortPages(upsertPage(current[importedParentId] ?? [], page))
+        }));
+        void loadCollectionChildren(importedParentId, undefined, true);
+      }
+
+      if (page.type === "NOTE") {
+        setSelectedPageId(page.id);
+      }
+
+      showToast({
+        title: "Note imported",
+        description: "Markdown note is ready.",
+        variant: "success"
+      });
+    } catch (error) {
+      showToast({
+        title: "Import failed",
+        description: getErrorMessage(error, "Import failed"),
+        variant: "error"
+      });
+    } finally {
+      isImportingMarkdownRef.current = false;
+      setImportingMarkdownTarget(null);
+    }
+  }
+
   function handleRequestDeletePage(pageId: number) {
     if (deletingPageId === pageId || exitingPageIds.includes(pageId)) {
       return;
@@ -357,6 +453,7 @@ export function App() {
         setChildrenByCollectionId((current) =>
           removePagesFromChildrenMap(current, removedPageIds)
         );
+        setFavoritePages((current) => removePagesFromFavorites(current, removedPageIds));
         setPageById((current) => removePagesFromCache(current, removedPageIds));
         setChildrenErrorByCollectionId((current) => omitRecordKeys(current, removedPageIds));
         setLoadingCollectionIds((current) => current.filter((id) => !removedPageIds.has(id)));
@@ -410,6 +507,41 @@ export function App() {
       throw error;
     } finally {
       setSavingPageId(null);
+    }
+  }
+
+  async function handleToggleFavorite(page: PageDto) {
+    if (
+      page.type !== "NOTE" ||
+      favoritingPageId === page.id ||
+      deletingPageId === page.id ||
+      exitingPageIds.includes(page.id)
+    ) {
+      return;
+    }
+
+    const nextFavorite = !page.favorite;
+    setFavoritingPageId(page.id);
+
+    try {
+      const updatedPage = await setPageFavorite(page.id, { favorite: nextFavorite });
+
+      mergeLoadedPage(updatedPage);
+      showToast({
+        title: updatedPage.favorite ? "Added to favorites" : "Removed from favorites",
+        description: updatedPage.favorite
+          ? "Note is now in Favorites."
+          : "Note was removed from Favorites.",
+        variant: "success"
+      });
+    } catch (error) {
+      showToast({
+        title: "Favorite failed",
+        description: getErrorMessage(error, "Failed to update favorite"),
+        variant: "error"
+      });
+    } finally {
+      setFavoritingPageId(null);
     }
   }
 
@@ -474,6 +606,7 @@ export function App() {
 
   function mergeLoadedPage(page: PageDto) {
     setPageById((current) => mergePageList(current, [page]));
+    syncFavoritePage(page);
 
     if (page.parentId === null) {
       setRootPages((current) => sortPages(upsertPage(current, page)));
@@ -493,6 +626,22 @@ export function App() {
         ...current,
         [parentId]: sortPages(upsertPage(currentChildren, page))
       };
+    });
+  }
+
+  function syncFavoritePage(page: PageDto) {
+    if (page.type !== "NOTE") {
+      return;
+    }
+
+    setFavoritePages((current) => {
+      const withoutPage = current.filter((favoritePage) => favoritePage.id !== page.id);
+
+      if (!page.favorite) {
+        return withoutPage;
+      }
+
+      return sortPages([...withoutPage, page]);
     });
   }
 
@@ -559,6 +708,7 @@ export function App() {
     <div className="app-frame">
       <Sidebar
         pages={rootPages}
+        favoritePages={favoritePages}
         childrenByCollectionId={childrenByCollectionId}
         expandedCollectionIds={expandedCollectionIds}
         loadingCollectionIds={loadingCollectionIds}
@@ -569,16 +719,25 @@ export function App() {
         isCreatingPage={isCreatingPage}
         creatingChildCollectionId={creatingChildCollectionId}
         savingPageId={savingPageId}
+        favoritingPageId={favoritingPageId}
         deletingPageId={deletingPageId}
         exportingPageId={exportingPageId}
+        isImportingMarkdown={isImportingMarkdown}
+        isImportingRootMarkdown={importingMarkdownTarget === "root"}
+        importingCollectionId={
+          typeof importingMarkdownTarget === "number" ? importingMarkdownTarget : null
+        }
         exitingPageIds={exitingPageIds}
         onCreateRootNote={() => runWithUnsavedChangesGuard(() => void handleCreateRootNote())}
         onCreateRootCollection={() => void handleCreateRootCollection()}
         onCreateNoteInCollection={(collectionId) =>
           runWithUnsavedChangesGuard(() => void handleCreateNoteInCollection(collectionId))
         }
+        onImportRootMarkdown={handleImportRootMarkdown}
+        onImportMarkdownToCollection={handleImportMarkdownToCollection}
         onDeletePage={(pageId) => runWithUnsavedChangesGuard(() => handleRequestDeletePage(pageId))}
         onExportPage={(page) => void handleExportPage(page)}
+        onToggleFavorite={(page) => void handleToggleFavorite(page)}
         onRenameCollection={handleRenameCollection}
         onSelectPage={(pageId) => {
           const page = pageById[pageId];
@@ -596,10 +755,12 @@ export function App() {
         page={selectedPage}
         pagesLoading={pagesLoading}
         savingPageId={savingPageId}
+        favoritingPageId={favoritingPageId}
         exportingPageId={exportingPageId}
         topbarContent={<SearchCommandPalette onOpenPage={handleOpenSearchResult} />}
         onCreatePage={() => runWithUnsavedChangesGuard(() => void handleCreateRootNote())}
         onExportPage={(page) => void handleExportPage(page)}
+        onToggleFavorite={(page) => void handleToggleFavorite(page)}
         onSavePage={handleSavePage}
       />
       {deleteDialogPageId !== null ? (
@@ -686,6 +847,10 @@ function getStoredSelectedPageId() {
   const parsedValue = rawValue ? Number(rawValue) : Number.NaN;
 
   return Number.isInteger(parsedValue) ? parsedValue : null;
+}
+
+function isMarkdownFile(file: File) {
+  return file.name.toLowerCase().endsWith(".md");
 }
 
 function getNextPosition(pages: PageDto[]) {
@@ -787,6 +952,14 @@ function removePagesFromChildrenMap(
       };
     },
     {}
+  );
+}
+
+function removePagesFromFavorites(favoritePages: PageDto[], removedPageIds: Set<number>) {
+  return favoritePages.filter(
+    (page) =>
+      !removedPageIds.has(page.id) &&
+      (page.parentId === null || !removedPageIds.has(page.parentId))
   );
 }
 

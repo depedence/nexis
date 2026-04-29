@@ -7,11 +7,13 @@ import nexis.ru.entity.Page;
 import nexis.ru.entity.PageType;
 import nexis.ru.entity.dto.PageDto;
 import nexis.ru.entity.request.CreatePageRequest;
+import nexis.ru.entity.request.SetFavoriteRequest;
 import nexis.ru.entity.request.UpdatePageRequest;
 import nexis.ru.entity.response.ExportFileResponse;
 import nexis.ru.mapper.PageMapper;
 import nexis.ru.repository.PageRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -131,6 +133,73 @@ public class PageService {
         }
 
         throw new IllegalArgumentException("Unsupported page type");
+    }
+
+    public PageDto importMarkdown(MultipartFile file, Long parentId) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("File is required");
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || !originalFilename.toLowerCase().endsWith(".md")) {
+            throw new IllegalArgumentException("Only .md files are supported");
+        }
+
+        Page parent = null;
+        if (parentId != null) {
+            parent = pageRepository.findById(parentId)
+                    .orElseThrow(() -> new EntityNotFoundException("Parent not found"));
+            if (parent.getType() != PageType.COLLECTION) {
+                throw new IllegalArgumentException("Only collections can contain imported notes");
+            }
+        }
+
+        String content;
+        try {
+            content = new String(file.getBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read markdown file", e);
+        }
+
+        String title = originalFilename.substring(0, originalFilename.length() - 3);
+        LocalDateTime now = LocalDateTime.now();
+
+        Page page = new Page();
+        page.setParentId(parentId != null ? parent.getId() : null);
+        page.setTitle(title);
+        page.setContent(content);
+        page.setType(PageType.NOTE);
+        page.setPosition(0);
+        page.setCreatedAt(now);
+        page.setUpdatedAt(now);
+
+        Page savedPage = pageRepository.save(page);
+
+        return pageMapper.toDto(savedPage);
+    }
+
+    public List<PageDto> getFavoritePages() {
+        List<Page> pages = pageRepository
+            .findByTypeAndFavoriteTrueOrderByUpdatedAtDesc(PageType.NOTE);
+
+        return pages.stream()
+            .map(pageMapper::toDto)
+            .toList();
+    }
+
+    public PageDto setFavorite(Long id, SetFavoriteRequest request) {
+        Page page = pageRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException("Page not found"));
+
+        if (page.getType() == PageType.COLLECTION) {
+            throw new IllegalArgumentException("Only notes can be added to favorites");
+        }
+
+        page.setFavorite(request.isFavorite());
+        page.setUpdatedAt(LocalDateTime.now());
+
+        Page savedPage = pageRepository.save(page);
+        return pageMapper.toDto(savedPage);
     }
 
     private ExportFileResponse exportNote(Page page) {

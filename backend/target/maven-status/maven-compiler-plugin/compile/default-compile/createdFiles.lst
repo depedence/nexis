@@ -11,6 +11,7 @@ nexis\ru\entity\response\ErrorResponse.class
 nexis\ru\entity\Page.class
 nexis\ru\entity\request\UpdatePageRequest.class
 nexis\ru\controller\PageRestController.class
+nexis\ru\entity\request\SetFavoriteRequest.class
 nexis\ru\entity\dto\PageDto.class
 nexis\ru\repository\PageRepository.class
 nexis\ru\entity\response\ExportFileResponse.class

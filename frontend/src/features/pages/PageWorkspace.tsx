@@ -8,7 +8,7 @@ import {
   useState
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { Check, ChevronRight, Edit3, FileDown, Plus } from "lucide-react";
+import { Check, ChevronRight, Edit3, FileDown, Plus, Star } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import type { PageDto } from "../../shared/types/page";
 import { useToast } from "../../shared/ui/ToastProvider";
@@ -21,10 +21,12 @@ type PageWorkspaceProps = {
   page: PageDto | null;
   pagesLoading: boolean;
   savingPageId: number | null;
+  favoritingPageId: number | null;
   exportingPageId: number | null;
   topbarContent?: ReactNode;
   onCreatePage: () => void;
   onExportPage: (page: PageDto) => void;
+  onToggleFavorite: (page: PageDto) => void;
   onSavePage: (pageId: number, payload: { title: string; content: string }) => Promise<void>;
 };
 
@@ -37,10 +39,12 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
       page,
       pagesLoading,
       savingPageId,
+      favoritingPageId,
       exportingPageId,
       topbarContent,
       onCreatePage,
       onExportPage,
+      onToggleFavorite,
       onSavePage
     },
     ref
@@ -60,6 +64,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
     });
 
     const isSaving = page ? savingPageId === page.id || isSavingRef.current : false;
+    const isFavoriting = page ? favoritingPageId === page.id : false;
     const isExporting = page ? exportingPageId === page.id : false;
     const isContentDirty =
       Boolean(page) &&
@@ -241,6 +246,14 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
       });
     }
 
+    function handleFavoriteButtonClick() {
+      if (!page || isFavoriting) {
+        return;
+      }
+
+      onToggleFavorite(page);
+    }
+
     if (pagesLoading && !page) {
       return (
         <main className="main main--empty">
@@ -277,6 +290,19 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
             <div className="workspace__topbar-center">{topbarContent}</div>
             <div className="workspace__actions">
               <div className="workspace__status">{isSaving ? "Saving..." : ""}</div>
+              <button
+                type="button"
+                className={`workspace__icon-button workspace__favorite-button ${
+                  page.favorite ? "is-favorite" : ""
+                }`}
+                aria-label={page.favorite ? "Remove from favorites" : "Add to favorites"}
+                title={page.favorite ? "Remove from favorites" : "Add to favorites"}
+                disabled={isFavoriting}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={handleFavoriteButtonClick}
+              >
+                <Star size={15} fill={page.favorite ? "currentColor" : "none"} />
+              </button>
               {!isEditingContent ? (
                 <button
                   type="button"

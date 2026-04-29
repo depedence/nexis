@@ -165,6 +165,7 @@ textarea {
 .ghost-button,
 .sidebar__new-page,
 .sidebar__create-button,
+.sidebar__import-button,
 .sidebar__item-more,
 .sidebar__item-rename,
 .sidebar__item-delete,
@@ -187,6 +188,7 @@ textarea {
 .theme-switch:hover,
 .sidebar__create-button:hover,
 .sidebar__create-button[aria-expanded="true"],
+.sidebar__import-button:hover,
 .toast__close:hover,
 .workspace__icon-button:hover {
   background: var(--accent-soft);
@@ -197,6 +199,7 @@ textarea {
 .workspace__icon-button:active,
 .sidebar__new-page:active,
 .sidebar__create-button:active,
+.sidebar__import-button:active,
 .sidebar__create-menu button:active,
 .sidebar__item-menu button:active,
 .sidebar__create-note:active,
@@ -230,6 +233,9 @@ textarea {
   position: relative;
   min-height: 30px;
   padding: 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .sidebar__create-button {
@@ -240,6 +246,33 @@ textarea {
   justify-content: center;
   color: var(--text);
   cursor: pointer;
+}
+
+.sidebar__import-button {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sidebar__import-button svg {
+  flex: 0 0 auto;
+}
+
+.sidebar__import-button:disabled {
+  opacity: 0.58;
+}
+
+.sidebar__import-button:disabled:hover {
+  background: transparent;
+}
+
+.sidebar__file-input {
+  display: none;
 }
 
 .sidebar__create-menu {
@@ -288,6 +321,12 @@ textarea {
   min-height: 0;
   overflow: auto;
   padding: 0 4px;
+}
+
+.sidebar__list--favorites {
+  flex: 0 0 auto;
+  max-height: 32vh;
+  padding-bottom: 4px;
 }
 
 .sidebar__state {
@@ -507,6 +546,16 @@ textarea {
   background: var(--accent-soft);
 }
 
+.sidebar__item-menu button.is-favorite,
+.workspace__favorite-button.is-favorite {
+  color: var(--accent);
+}
+
+.sidebar__item-menu button.is-favorite svg,
+.workspace__favorite-button.is-favorite svg {
+  fill: currentColor;
+}
+
 .sidebar__children {
   animation: sidebar-children-enter 160ms ease;
 }
@@ -593,6 +642,10 @@ textarea {
 
 .workspace__icon-button:hover {
   color: var(--text);
+}
+
+.workspace__favorite-button.is-favorite:hover {
+  color: var(--accent);
 }
 
 .breadcrumb {
