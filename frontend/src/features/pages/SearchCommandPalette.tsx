@@ -4,12 +4,13 @@ import type { PageDto } from "../../shared/types/page";
 import { searchPages } from "./pagesApi";
 
 type SearchCommandPaletteProps = {
+  openRequestKey?: number;
   onOpenPage: (page: PageDto) => void;
 };
 
 type SearchStatus = "idle" | "loading" | "success" | "error";
 
-export function SearchCommandPalette({ onOpenPage }: SearchCommandPaletteProps) {
+export function SearchCommandPalette({ openRequestKey = 0, onOpenPage }: SearchCommandPaletteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PageDto[]>([]);
@@ -19,6 +20,14 @@ export function SearchCommandPalette({ onOpenPage }: SearchCommandPaletteProps) 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const trimmedQuery = query.trim();
+
+  useEffect(() => {
+    if (openRequestKey === 0) {
+      return;
+    }
+
+    openPalette();
+  }, [openRequestKey]);
 
   useEffect(() => {
     if (!isOpen) {

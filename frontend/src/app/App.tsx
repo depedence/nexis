@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageWorkspace, type PageWorkspaceHandle } from "../features/pages/PageWorkspace";
 import { SearchCommandPalette } from "../features/pages/SearchCommandPalette";
 import { Sidebar } from "../features/pages/Sidebar";
@@ -9,6 +9,7 @@ import {
   getFavoritePages,
   getPage,
   getPageChildren,
+  getPages,
   getRootPages,
   importMarkdown,
   setPageFavorite,
@@ -26,12 +27,16 @@ export function App() {
   const { showToast } = useToast();
   const [rootPages, setRootPages] = useState<PageDto[]>([]);
   const [favoritePages, setFavoritePages] = useState<PageDto[]>([]);
+  const [allPages, setAllPages] = useState<PageDto[]>([]);
   const [childrenByCollectionId, setChildrenByCollectionId] =
     useState<ChildrenByCollectionId>({});
   const [pageById, setPageById] = useState<PageById>({});
   const [pagesLoading, setPagesLoading] = useState(true);
+  const [favoritePagesLoading, setFavoritePagesLoading] = useState(true);
+  const [recentPagesLoading, setRecentPagesLoading] = useState(true);
   const [selectedPageId, setSelectedPageId] = useState<number | null>(null);
   const [pagesError, setPagesError] = useState<string | null>(null);
+  const [recentPagesError, setRecentPagesError] = useState<string | null>(null);
   const [expandedCollectionIds, setExpandedCollectionIds] = useState<number[]>([]);
   const [loadingCollectionIds, setLoadingCollectionIds] = useState<number[]>([]);
   const [childrenErrorByCollectionId, setChildrenErrorByCollectionId] = useState<
@@ -48,6 +53,7 @@ export function App() {
   const [deleteDialogPageId, setDeleteDialogPageId] = useState<number | null>(null);
   const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
   const [exitingPageIds, setExitingPageIds] = useState<number[]>([]);
+  const [searchOpenRequestKey, setSearchOpenRequestKey] = useState(0);
   const selectedPageRef = useRef<number | null>(null);
   const workspaceRef = useRef<PageWorkspaceHandle | null>(null);
   const isCreatingPageRef = useRef(false);
@@ -57,9 +63,11 @@ export function App() {
     selectedPageId === null ? null : pageById[selectedPageId] ?? null;
   const selectedPage = selectedPageCandidate?.type === "NOTE" ? selectedPageCandidate : null;
   const isImportingMarkdown = importingMarkdownTarget !== null;
+  const recentPages = useMemo(() => getRecentNotePages(allPages), [allPages]);
 
   useEffect(() => {
     const controller = new AbortController();
+    void loadAllPages(controller.signal);
     void loadRootPages(controller.signal);
     void loadFavoritePages(controller.signal);
     return () => controller.abort();
@@ -107,6 +115,7 @@ export function App() {
 
       setRootPages(nextRootPages);
       setPageById((current) => mergePageList(current, nextRootPages));
+      setAllPages((current) => mergePages(current, nextRootPages));
 
       const preferredId = selectedPageRef.current ?? getStoredSelectedPageId();
 
@@ -123,7 +132,7 @@ export function App() {
         }
       }
 
-      setSelectedPageId(getFirstNoteId(nextRootPages));
+      setSelectedPageId(null);
     } catch (error) {
       if (!signal?.aborted) {
         setPagesError(getErrorMessage(error, "Failed to load pages"));
@@ -140,7 +149,33 @@ export function App() {
     }
   }
 
+  async function loadAllPages(signal?: AbortSignal) {
+    setRecentPagesLoading(true);
+    setRecentPagesError(null);
+
+    try {
+      const nextAllPages = await getPages(signal);
+
+      if (signal?.aborted) {
+        return;
+      }
+
+      setAllPages(nextAllPages);
+      setPageById((current) => mergePageList(current, nextAllPages));
+    } catch (error) {
+      if (!signal?.aborted) {
+        setRecentPagesError(getErrorMessage(error, "Failed to load recent pages"));
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setRecentPagesLoading(false);
+      }
+    }
+  }
+
   async function loadFavoritePages(signal?: AbortSignal) {
+    setFavoritePagesLoading(true);
+
     try {
       const nextFavoritePages = sortPages(await getFavoritePages(signal)).filter(
         (page) => page.type === "NOTE" && page.favorite
@@ -152,6 +187,7 @@ export function App() {
 
       setFavoritePages(nextFavoritePages);
       setPageById((current) => mergePageList(current, nextFavoritePages));
+      setAllPages((current) => mergePages(current, nextFavoritePages));
     } catch (error) {
       if (!signal?.aborted) {
         showToast({
@@ -159,6 +195,10 @@ export function App() {
           description: getErrorMessage(error, "Failed to load favorites"),
           variant: "error"
         });
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setFavoritePagesLoading(false);
       }
     }
   }
@@ -205,6 +245,7 @@ export function App() {
         [collectionId]: children
       }));
       setPageById((current) => mergePageList(current, children));
+      setAllPages((current) => mergePages(current, children));
     } catch (error) {
       if (!signal?.aborted) {
         const message = getErrorMessage(error, "Failed to load collection");
@@ -454,6 +495,7 @@ export function App() {
           removePagesFromChildrenMap(current, removedPageIds)
         );
         setFavoritePages((current) => removePagesFromFavorites(current, removedPageIds));
+        setAllPages((current) => current.filter((page) => !removedPageIds.has(page.id)));
         setPageById((current) => removePagesFromCache(current, removedPageIds));
         setChildrenErrorByCollectionId((current) => omitRecordKeys(current, removedPageIds));
         setLoadingCollectionIds((current) => current.filter((id) => !removedPageIds.has(id)));
@@ -606,6 +648,7 @@ export function App() {
 
   function mergeLoadedPage(page: PageDto) {
     setPageById((current) => mergePageList(current, [page]));
+    setAllPages((current) => mergePages(current, [page]));
     syncFavoritePage(page);
 
     if (page.parentId === null) {
@@ -675,6 +718,24 @@ export function App() {
     action();
   }
 
+  function openHome() {
+    setSelectedPageId(null);
+  }
+
+  function handleOpenHome() {
+    runWithUnsavedChangesGuard(openHome);
+  }
+
+  function handleSelectNote(pageId: number) {
+    const page = pageById[pageId];
+
+    if (!page || page.type !== "NOTE" || pageId === selectedPageId) {
+      return;
+    }
+
+    runWithUnsavedChangesGuard(() => setSelectedPageId(pageId));
+  }
+
   function handleOpenSearchResult(page: PageDto) {
     mergeLoadedPage(page);
 
@@ -739,26 +800,32 @@ export function App() {
         onExportPage={(page) => void handleExportPage(page)}
         onToggleFavorite={(page) => void handleToggleFavorite(page)}
         onRenameCollection={handleRenameCollection}
-        onSelectPage={(pageId) => {
-          const page = pageById[pageId];
-
-          if (!page || page.type !== "NOTE" || pageId === selectedPageId) {
-            return;
-          }
-
-          runWithUnsavedChangesGuard(() => setSelectedPageId(pageId));
-        }}
+        onOpenHome={handleOpenHome}
+        onOpenSearch={() => setSearchOpenRequestKey((current) => current + 1)}
+        onSelectPage={handleSelectNote}
         onToggleCollection={handleToggleCollection}
       />
       <PageWorkspace
         ref={workspaceRef}
         page={selectedPage}
+        favoritePages={favoritePages}
+        recentPages={recentPages}
         pagesLoading={pagesLoading}
+        favoritePagesLoading={favoritePagesLoading}
+        recentPagesLoading={recentPagesLoading}
+        recentPagesError={recentPagesError}
         savingPageId={savingPageId}
         favoritingPageId={favoritingPageId}
         exportingPageId={exportingPageId}
-        topbarContent={<SearchCommandPalette onOpenPage={handleOpenSearchResult} />}
+        topbarContent={
+          <SearchCommandPalette
+            openRequestKey={searchOpenRequestKey}
+            onOpenPage={handleOpenSearchResult}
+          />
+        }
         onCreatePage={() => runWithUnsavedChangesGuard(() => void handleCreateRootNote())}
+        onOpenHome={openHome}
+        onOpenPage={handleSelectNote}
         onExportPage={(page) => void handleExportPage(page)}
         onToggleFavorite={(page) => void handleToggleFavorite(page)}
         onSavePage={handleSavePage}
@@ -816,6 +883,10 @@ function upsertPage(pages: PageDto[], nextPage: PageDto) {
   return [...pages, nextPage];
 }
 
+function mergePages(pages: PageDto[], nextPages: PageDto[]) {
+  return nextPages.reduce((mergedPages, page) => upsertPage(mergedPages, page), pages);
+}
+
 function mergePageList(pageById: PageById, pages: PageDto[]) {
   return pages.reduce<PageById>(
     (nextPageById, page) => ({
@@ -861,8 +932,16 @@ function getNextPosition(pages: PageDto[]) {
   return Math.max(...pages.map((page) => page.position)) + 1;
 }
 
-function getFirstNoteId(pages: PageDto[]) {
-  return pages.find((page) => page.type === "NOTE")?.id ?? null;
+function getRecentNotePages(pages: PageDto[]) {
+  return [...pages]
+    .filter((page) => page.type === "NOTE")
+    .sort((left, right) => getDateMs(right.updatedAt) - getDateMs(left.updatedAt))
+    .slice(0, 5);
+}
+
+function getDateMs(value: string) {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 function findPageInTree(

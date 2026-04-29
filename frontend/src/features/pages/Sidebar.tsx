@@ -6,8 +6,11 @@ import {
   FolderOpen,
   MoreHorizontal,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Plus,
+  Search,
   Star,
   Sun,
   Trash2,
@@ -19,7 +22,8 @@ import {
   useState,
   type ChangeEvent,
   type CSSProperties,
-  type MouseEvent
+  type MouseEvent,
+  type PointerEvent as ReactPointerEvent
 } from "react";
 import type { PageDto } from "../../shared/types/page";
 import { useTheme } from "../../shared/ui/ThemeProvider";
@@ -53,8 +57,14 @@ type SidebarProps = {
   onExportPage: (page: PageDto) => void;
   onToggleFavorite: (page: PageDto) => void;
   onRenameCollection: (collectionId: number, title: string) => Promise<void>;
+  onOpenHome: () => void;
+  onOpenSearch: () => void;
   onSelectPage: (pageId: number) => void;
   onToggleCollection: (collectionId: number) => void;
+};
+
+type SidebarStyle = CSSProperties & {
+  "--sidebar-current-width": string;
 };
 
 type SidebarDepthStyle = CSSProperties & {
@@ -75,6 +85,14 @@ type FavoriteTree = {
   rootNotes: PageDto[];
   groups: FavoriteCollectionGroup[];
 };
+
+const SIDEBAR_WIDTH_STORAGE_KEY = "nexis-sidebar-width";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "nexis-sidebar-collapsed";
+const SIDEBAR_COLLAPSED_WIDTH = 64;
+const SIDEBAR_EXPANDED_MIN_WIDTH = 220;
+const SIDEBAR_DEFAULT_WIDTH = 240;
+const SIDEBAR_MAX_WIDTH = 420;
+const SIDEBAR_COLLAPSE_THRESHOLD = 142;
 
 export function Sidebar({
   pages,
@@ -105,10 +123,15 @@ export function Sidebar({
   onExportPage,
   onToggleFavorite,
   onRenameCollection,
+  onOpenHome,
+  onOpenSearch,
   onSelectPage,
   onToggleCollection
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
+  const [sidebarWidth, setSidebarWidth] = useState(() => getStoredSidebarWidth());
+  const [isCollapsed, setIsCollapsed] = useState(() => getStoredSidebarCollapsed());
+  const [isResizing, setIsResizing] = useState(false);
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const [openActionMenuKey, setOpenActionMenuKey] = useState<string | null>(null);
   const [expandedFavoriteCollectionIds, setExpandedFavoriteCollectionIds] = useState<number[]>([]);
@@ -121,6 +144,34 @@ export function Sidebar({
   const collectionImportTargetIdRef = useRef<number | null>(null);
   const collectionTitleInputRef = useRef<HTMLInputElement | null>(null);
   const isCommittingCollectionRenameRef = useRef(false);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const sidebarStyle: SidebarStyle = {
+    "--sidebar-current-width": `${isCollapsed ? SIDEBAR_COLLAPSED_WIDTH : sidebarWidth}px`
+  };
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isCollapsed));
+  }, [isCollapsed]);
+
+  useEffect(
+    () => () => {
+      document.body.classList.remove("is-sidebar-resizing");
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!isCollapsed) {
+      return;
+    }
+
+    setOpenActionMenuKey(null);
+    setEditingCollectionId(null);
+  }, [isCollapsed]);
 
   useEffect(() => {
     if (!isCreateMenuOpen) {
@@ -186,6 +237,48 @@ export function Sidebar({
     collectionTitleInputRef.current?.focus();
     collectionTitleInputRef.current?.select();
   }, [editingCollectionId]);
+
+  function toggleSidebarCollapsed() {
+    setIsCollapsed((current) => !current);
+  }
+
+  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    const sidebarNode = sidebarRef.current;
+
+    if (!sidebarNode) {
+      return;
+    }
+
+    event.preventDefault();
+    setIsResizing(true);
+    document.body.classList.add("is-sidebar-resizing");
+
+    const sidebarLeft = sidebarNode.getBoundingClientRect().left;
+
+    const handlePointerMove = (pointerEvent: PointerEvent) => {
+      const nextWidth = pointerEvent.clientX - sidebarLeft;
+
+      if (nextWidth <= SIDEBAR_COLLAPSE_THRESHOLD) {
+        setIsCollapsed(true);
+        return;
+      }
+
+      setIsCollapsed(false);
+      setSidebarWidth(clamp(nextWidth, SIDEBAR_EXPANDED_MIN_WIDTH, SIDEBAR_MAX_WIDTH));
+    };
+
+    const stopResize = () => {
+      setIsResizing(false);
+      document.body.classList.remove("is-sidebar-resizing");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  }
 
   function createRootNote() {
     setIsCreateMenuOpen(false);
@@ -633,18 +726,47 @@ export function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
+    <aside
+      ref={sidebarRef}
+      className={`sidebar ${isCollapsed ? "is-collapsed" : ""} ${
+        isResizing ? "is-resizing" : ""
+      }`}
+      style={sidebarStyle}
+    >
       <div className="sidebar__top">
-        <div className="sidebar__brand">
+        <button
+          type="button"
+          className="sidebar__brand"
+          aria-label="Open Home"
+          title="Home"
+          onClick={onOpenHome}
+        >
           <span className="sidebar__brand-mark">N</span>
           <div>
             <div className="sidebar__brand-title">Nexis</div>
             <div className="sidebar__brand-caption">Workspace</div>
           </div>
-        </div>
-        <button type="button" className="theme-switch" onClick={toggleTheme} aria-label="Toggle theme">
-          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
         </button>
+        <div className="sidebar__top-actions">
+          <button
+            type="button"
+            className="theme-switch"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            title="Toggle theme"
+          >
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+          <button
+            type="button"
+            className="sidebar__collapse-button"
+            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={toggleSidebarCollapsed}
+          >
+            {isCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+          </button>
+        </div>
       </div>
 
       <div ref={createMenuRef} className="sidebar__create">
@@ -652,6 +774,7 @@ export function Sidebar({
           type="button"
           className="sidebar__create-button"
           aria-label="Create"
+          title="Create"
           aria-expanded={isCreateMenuOpen}
           disabled={isCreatingPage}
           onClick={() => setIsCreateMenuOpen((current) => !current)}
@@ -661,12 +784,25 @@ export function Sidebar({
         <button
           type="button"
           className="sidebar__import-button"
+          aria-label="Import markdown"
+          title="Import markdown"
           disabled={isImportingMarkdown}
           onClick={openRootImportPicker}
         >
           <Upload size={14} />
           <span>{isImportingRootMarkdown ? "Importing..." : "Import"}</span>
         </button>
+        {isCollapsed ? (
+          <button
+            type="button"
+            className="sidebar__rail-button"
+            aria-label="Open search"
+            title="Search"
+            onClick={onOpenSearch}
+          >
+            <Search size={14} />
+          </button>
+        ) : null}
         <input
           ref={rootImportInputRef}
           className="sidebar__file-input"
@@ -701,23 +837,39 @@ export function Sidebar({
         ) : null}
       </div>
 
-      {renderFavoritesSection()}
+      {!isCollapsed ? (
+        <>
+          {renderFavoritesSection()}
 
-      <div className="sidebar__label">Pages</div>
+          <div className="sidebar__label">Pages</div>
 
-      <div className="sidebar__list">
-        {isLoading ? <div className="sidebar__state sidebar__state--muted">Loading pages...</div> : null}
-        {!isLoading && errorMessage ? <div className="sidebar__state sidebar__state--error">{errorMessage}</div> : null}
-        {!isLoading && !errorMessage && pages.length === 0 ? (
-          <div className="sidebar__state sidebar__state--empty">
-            <div>No pages yet</div>
-            <span>Create the first note or collection to start writing.</span>
+          <div className="sidebar__list">
+            {isLoading ? (
+              <div className="sidebar__state sidebar__state--muted">Loading pages...</div>
+            ) : null}
+            {!isLoading && errorMessage ? (
+              <div className="sidebar__state sidebar__state--error">{errorMessage}</div>
+            ) : null}
+            {!isLoading && !errorMessage && pages.length === 0 ? (
+              <div className="sidebar__state sidebar__state--empty">
+                <div>No pages yet</div>
+                <span>Create the first note or collection to start writing.</span>
+              </div>
+            ) : null}
+            {!isLoading && pages.map((page) => renderPage(page, 0))}
           </div>
-        ) : null}
-        {!isLoading && pages.map((page) => renderPage(page, 0))}
-      </div>
 
-      <div className="sidebar__footer">depedence 2026</div>
+          <div className="sidebar__footer">depedence 2026</div>
+        </>
+      ) : null}
+
+      <div
+        className="sidebar__resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
+        onPointerDown={handleResizePointerDown}
+      />
     </aside>
   );
 }
@@ -726,6 +878,24 @@ function getDepthStyle(depth: number): SidebarDepthStyle {
   return {
     "--sidebar-depth-offset": `${depth * 14}px`
   };
+}
+
+function getStoredSidebarWidth() {
+  const storedValue = Number(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
+
+  if (!Number.isFinite(storedValue)) {
+    return SIDEBAR_DEFAULT_WIDTH;
+  }
+
+  return clamp(storedValue, SIDEBAR_EXPANDED_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
+}
+
+function getStoredSidebarCollapsed() {
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
 function getFavoriteTree(

@@ -8,7 +8,7 @@ import {
   useState
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { Check, ChevronRight, Edit3, FileDown, Plus, Star } from "lucide-react";
+import { Check, ChevronRight, Edit3, FileDown, FileText, Plus, Star } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import type { PageDto } from "../../shared/types/page";
 import { useToast } from "../../shared/ui/ToastProvider";
@@ -19,12 +19,19 @@ export type PageWorkspaceHandle = {
 
 type PageWorkspaceProps = {
   page: PageDto | null;
+  favoritePages: PageDto[];
+  recentPages: PageDto[];
   pagesLoading: boolean;
+  favoritePagesLoading: boolean;
+  recentPagesLoading: boolean;
+  recentPagesError: string | null;
   savingPageId: number | null;
   favoritingPageId: number | null;
   exportingPageId: number | null;
   topbarContent?: ReactNode;
   onCreatePage: () => void;
+  onOpenHome: () => void;
+  onOpenPage: (pageId: number) => void;
   onExportPage: (page: PageDto) => void;
   onToggleFavorite: (page: PageDto) => void;
   onSavePage: (pageId: number, payload: { title: string; content: string }) => Promise<void>;
@@ -37,12 +44,19 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
   function PageWorkspace(
     {
       page,
+      favoritePages,
+      recentPages,
       pagesLoading,
+      favoritePagesLoading,
+      recentPagesLoading,
+      recentPagesError,
       savingPageId,
       favoritingPageId,
       exportingPageId,
       topbarContent,
       onCreatePage,
+      onOpenHome,
+      onOpenPage,
       onExportPage,
       onToggleFavorite,
       onSavePage
@@ -77,17 +91,19 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
         lastSyncedRef.current.title !== (titleDraft.trim() || "Untitled"));
     const previewContent = useMemo(() => contentDraft.trim(), [contentDraft]);
 
+    function runWithUnsavedChangesGuard(action: () => void) {
+      if (isEditingContent && isDraftDirty) {
+        setConfirmDialog({ action });
+        return;
+      }
+
+      action();
+    }
+
     useImperativeHandle(
       ref,
       () => ({
-        runWithUnsavedChangesGuard(action) {
-          if (isEditingContent && isDraftDirty) {
-            setConfirmDialog({ action });
-            return;
-          }
-
-          action();
-        }
+        runWithUnsavedChangesGuard
       }),
       [isDraftDirty, isEditingContent]
     );
@@ -254,25 +270,52 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
       onToggleFavorite(page);
     }
 
-    if (pagesLoading && !page) {
-      return (
-        <main className="main main--empty">
-          <div className="empty-state">
-            <p>Loading pages...</p>
-          </div>
-        </main>
-      );
+    function handleHomeButtonClick() {
+      runWithUnsavedChangesGuard(onOpenHome);
     }
 
     if (!page) {
       return (
-        <main className="main main--empty">
-          <div className="empty-state">
-            <p>Select or create a note</p>
-            <button type="button" className="ghost-button" onClick={onCreatePage}>
-              <Plus size={14} />
-              Create note
-            </button>
+        <main className="main">
+          <div className="workspace workspace--home">
+            <div className="workspace__topbar">
+              <div className="breadcrumb">
+                <span className="breadcrumb__current">Nexis</span>
+              </div>
+              <div className="workspace__topbar-center">{topbarContent}</div>
+              <div className="workspace__actions">
+                <button
+                  type="button"
+                  className="workspace__icon-button"
+                  aria-label="Create note"
+                  title="Create note"
+                  onClick={onCreatePage}
+                >
+                  <Plus size={15} />
+                </button>
+              </div>
+            </div>
+
+            <section className="home-shell" aria-label="Home">
+              <HomeSection
+                title="Favorite Pages"
+                pages={favoritePages}
+                isLoading={favoritePagesLoading}
+                emptyMessage="No favorite pages yet"
+                loadingMessage="Loading favorite pages..."
+                onOpenPage={onOpenPage}
+              />
+              <HomeSection
+                title="Recent Pages"
+                pages={recentPages}
+                isLoading={recentPagesLoading || pagesLoading}
+                emptyMessage="No recent pages"
+                errorMessage={recentPagesError}
+                loadingMessage="Loading recent pages..."
+                showUpdatedAt
+                onOpenPage={onOpenPage}
+              />
+            </section>
           </div>
         </main>
       );
@@ -283,7 +326,9 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
         <div key={page.id} className="workspace">
           <div className="workspace__topbar">
             <div className="breadcrumb">
-              <span>Nexis</span>
+              <button type="button" className="breadcrumb__home" onClick={handleHomeButtonClick}>
+                Nexis
+              </button>
               <ChevronRight size={12} />
               <span>{page.title.trim() || "Untitled"}</span>
             </div>
@@ -408,3 +453,104 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
     );
   }
 );
+
+type HomeSectionProps = {
+  title: string;
+  pages: PageDto[];
+  isLoading: boolean;
+  emptyMessage: string;
+  loadingMessage: string;
+  errorMessage?: string | null;
+  showUpdatedAt?: boolean;
+  onOpenPage: (pageId: number) => void;
+};
+
+function HomeSection({
+  title,
+  pages,
+  isLoading,
+  emptyMessage,
+  loadingMessage,
+  errorMessage = null,
+  showUpdatedAt = false,
+  onOpenPage
+}: HomeSectionProps) {
+  return (
+    <section className="home-section">
+      <h2>{title}</h2>
+      {isLoading ? <div className="home-section__state">{loadingMessage}</div> : null}
+      {!isLoading && errorMessage ? (
+        <div className="home-section__state home-section__state--error">{errorMessage}</div>
+      ) : null}
+      {!isLoading && !errorMessage && pages.length === 0 ? (
+        <div className="home-section__state">{emptyMessage}</div>
+      ) : null}
+      {!isLoading && !errorMessage && pages.length > 0 ? (
+        <div className="home-page-list">
+          {pages.map((page) => (
+            <button
+              key={page.id}
+              type="button"
+              className="home-page-card"
+              onClick={() => onOpenPage(page.id)}
+            >
+              <span className="home-page-card__icon" aria-hidden="true">
+                <FileText size={15} />
+              </span>
+              <span className="home-page-card__body">
+                <span className="home-page-card__title">{page.title.trim() || "Untitled"}</span>
+                <span className="home-page-card__preview">{getPagePreview(page)}</span>
+              </span>
+              {showUpdatedAt ? (
+                <time className="home-page-card__date" dateTime={page.updatedAt}>
+                  {formatUpdatedAt(page.updatedAt)}
+                </time>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function getPagePreview(page: PageDto) {
+  const preview = stripMarkdown(page.content ?? "");
+
+  if (!preview) {
+    return "Empty page";
+  }
+
+  return preview.length > 170 ? `${preview.slice(0, 167).trimEnd()}...` : preview;
+}
+
+function stripMarkdown(content: string) {
+  return content
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/[*_~>#-]+/g, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatUpdatedAt(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}

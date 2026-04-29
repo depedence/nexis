@@ -13,6 +13,10 @@ export function getRootPages(signal?: AbortSignal) {
   return apiClient<PageDto[]>("/pages/root", { signal });
 }
 
+export function getPages(signal?: AbortSignal) {
+  return apiClient<PageDto[]>("/pages", { signal });
+}
+
 export function getPageChildren(pageId: number, signal?: AbortSignal) {
   return apiClient<PageDto[]>(`/pages/${pageId}/children`, { signal });
 }
