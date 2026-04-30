@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: nexis
+
+  profiles:
+    active: dev
+
+server:
+  port: 8080

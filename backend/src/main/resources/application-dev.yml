@@ -8,3 +8,7 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
+
+app:
+  cors:
+    allowed-origin: http://localhost:5173

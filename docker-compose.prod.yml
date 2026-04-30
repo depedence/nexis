@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: nexis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nexis_db
+      POSTGRES_USER: nexis_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nexis-network
+
+  backend:
+    build:
+      context: ./backend
+    container_name: nexis_backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/nexis_db
+      DB_USER: nexis_user
+      DB_PASSWORD: ${DB_PASSWORD}
+      FRONTEND_URL: ${FRONTEND_URL}
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8080"
+    networks:
+      - nexis-network
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: nexis-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - nexis-network
+
+volumes:
+  postgres_data:
+
+networks:
+  nexis-network:
