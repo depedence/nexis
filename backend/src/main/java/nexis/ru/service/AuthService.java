@@ -4,6 +4,7 @@ import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import nexis.ru.entity.User;
+import nexis.ru.entity.UserRole;
 import nexis.ru.entity.request.LoginRequest;
 import nexis.ru.entity.request.RegisterRequest;
 import nexis.ru.entity.response.AuthResponse;
@@ -36,6 +37,7 @@ public class AuthService {
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setCreatedAt(LocalDateTime.now());
+        user.setUserRole(UserRole.USER);
 
         User savedUser = userRepository.save(user);
         String token = jwtService.generateToken(savedUser.getUsername());
