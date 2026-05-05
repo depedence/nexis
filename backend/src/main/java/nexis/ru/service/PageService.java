@@ -5,6 +5,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import nexis.ru.entity.Page;
 import nexis.ru.entity.PageType;
+import nexis.ru.entity.User;
 import nexis.ru.entity.dto.PageDto;
 import nexis.ru.entity.request.CreatePageRequest;
 import nexis.ru.entity.request.SetFavoriteRequest;
@@ -12,6 +13,7 @@ import nexis.ru.entity.request.UpdatePageRequest;
 import nexis.ru.entity.response.ExportFileResponse;
 import nexis.ru.mapper.PageMapper;
 import nexis.ru.repository.PageRepository;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,6 +22,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -35,8 +38,9 @@ public class PageService {
             throw new IllegalArgumentException("Page type is required");
         }
 
+        Page parent = null;
         if (request.getParentId() != null) {
-            Page parent = pageRepository.findById(request.getParentId())
+            parent = pageRepository.findByIdAndUser(request.getParentId(), getCurrentUser())
                 .orElseThrow(() -> new EntityNotFoundException("Parent not found"));
 
             if (parent.getType() != PageType.COLLECTION) {
@@ -46,25 +50,28 @@ public class PageService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        PageDto pageDto = new PageDto();
-        pageDto.setParentId(request.getParentId());
-        pageDto.setTitle(request.getTitle());
-        if (request.getType() == PageType.COLLECTION) {
-            pageDto.setContent(null);
-        } else {
-            pageDto.setContent(request.getContent() != null ? request.getContent() : "");
-        }
-        pageDto.setType(request.getType());
-        pageDto.setPosition(request.getPosition());
-        pageDto.setCreatedAt(now);
-        pageDto.setUpdatedAt(now);
+        Page page = new Page();
+        page.setParentId(parent != null ? parent.getId() : null);
+        page.setTitle(request.getTitle());
+        page.setType(request.getType());
+        page.setPosition(request.getPosition());
+        page.setCreatedAt(now);
+        page.setUpdatedAt(now);
 
-        Page savedPage = pageRepository.save(pageMapper.toEntity(pageDto));
+        if (request.getType() == PageType.COLLECTION) {
+            page.setContent(null);
+        } else {
+            page.setContent(request.getContent() != null ? request.getContent() : "");
+        }
+
+        page.setUser(getCurrentUser());
+
+        Page savedPage = pageRepository.save(page);
         return pageMapper.toDto(savedPage);
     }
 
     public List<PageDto> getPages() {
-        List<Page> pages = pageRepository.findAll();
+        List<Page> pages = pageRepository.findByUser(getCurrentUser());
 
         return pages.stream()
                 .map(pageMapper::toDto)
@@ -72,18 +79,24 @@ public class PageService {
     }
 
     public PageDto getPageById(Long id) {
-        Page page = pageRepository.findById(id)
+        Page page = pageRepository.findByIdAndUser(id, getCurrentUser())
                 .orElseThrow(() -> new EntityNotFoundException("Page not found"));
 
         return pageMapper.toDto(page);
     }
 
     public PageDto updatePage(Long id, UpdatePageRequest request) {
-        Page page = pageRepository.findById(id)
+        Page page = pageRepository.findByIdAndUser(id, getCurrentUser())
                 .orElseThrow(() -> new EntityNotFoundException("Page not found"));
 
         page.setTitle(request.getTitle());
-        page.setContent(request.getContent());
+
+        if (page.getType() == PageType.COLLECTION) {
+            page.setContent(null);
+        } else {
+            page.setContent(request.getContent() != null ? request.getContent() : null);
+        }
+
         page.setUpdatedAt(LocalDateTime.now());
 
         Page savedPage = pageRepository.save(page);
@@ -92,14 +105,13 @@ public class PageService {
 
     @Transactional
     public void deletePage(Long id) {
-        Page page = pageRepository.findById(id)
+        Page page = pageRepository.findByIdAndUser(id, getCurrentUser())
                 .orElseThrow(() -> new EntityNotFoundException("Page not found"));
         pageRepository.delete(page);
     }
 
     public List<PageDto> searchPages(String query) {
-        List<Page> pages = pageRepository
-        .findByTitleContainingIgnoreCaseOrContentContainingIgnoreCase(query, query);
+        List<Page> pages = pageRepository.search(getCurrentUser(), query);
 
         return pages.stream()
             .map(pageMapper::toDto)
@@ -107,21 +119,21 @@ public class PageService {
     }
 
     public List<PageDto> getRootPages() {
-        return pageRepository.findByParentIdIsNullOrderByPositionAsc()
+        return pageRepository.findByParentIdIsNullOrderByPositionAsc(getCurrentUser())
                 .stream()
                 .map(pageMapper::toDto)
                 .toList();
     }
 
     public List<PageDto> getChildrenPages(Long parentId) {
-        return pageRepository.findByParentIdOrderByPositionAsc(parentId)
+        return pageRepository.findByParentIdOrderByPositionAsc(parentId, getCurrentUser())
                 .stream()
                 .map(pageMapper::toDto)
                 .toList();
     }
 
     public ExportFileResponse exportPage(Long id) {
-        Page page = pageRepository.findById(id)
+        Page page = pageRepository.findByIdAndUser(id, getCurrentUser())
                 .orElseThrow(() -> new EntityNotFoundException("Page not found"));
 
         if (page.getType() == PageType.NOTE) {
@@ -147,7 +159,7 @@ public class PageService {
 
         Page parent = null;
         if (parentId != null) {
-            parent = pageRepository.findById(parentId)
+            parent = pageRepository.findByIdAndUser(parentId, getCurrentUser())
                     .orElseThrow(() -> new EntityNotFoundException("Parent not found"));
             if (parent.getType() != PageType.COLLECTION) {
                 throw new IllegalArgumentException("Only collections can contain imported notes");
@@ -172,6 +184,7 @@ public class PageService {
         page.setPosition(0);
         page.setCreatedAt(now);
         page.setUpdatedAt(now);
+        page.setUser(getCurrentUser());
 
         Page savedPage = pageRepository.save(page);
 
@@ -180,7 +193,7 @@ public class PageService {
 
     public List<PageDto> getFavoritePages() {
         List<Page> pages = pageRepository
-            .findByTypeAndFavoriteTrueOrderByUpdatedAtDesc(PageType.NOTE);
+            .findByTypeAndFavoriteTrueOrderByUpdatedAtDesc(PageType.NOTE, getCurrentUser());
 
         return pages.stream()
             .map(pageMapper::toDto)
@@ -188,7 +201,7 @@ public class PageService {
     }
 
     public PageDto setFavorite(Long id, SetFavoriteRequest request) {
-        Page page = pageRepository.findById(id)
+        Page page = pageRepository.findByIdAndUser(id, getCurrentUser())
             .orElseThrow(() -> new EntityNotFoundException("Page not found"));
 
         if (page.getType() == PageType.COLLECTION) {
@@ -216,7 +229,7 @@ public class PageService {
     }
 
     private ExportFileResponse exportCollection(Page collection) {
-        List<Page> children = pageRepository.findByParentIdOrderByPositionAsc(collection.getId());
+        List<Page> children = pageRepository.findByParentIdOrderByPositionAsc(collection.getId(), getCurrentUser());
 
         try {
             ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
@@ -254,5 +267,13 @@ public class PageService {
         return filename
                 .replaceAll("[\\\\/:*?\"<>|]", "_")
                 .trim();
+    }
+
+    private User getCurrentUser() {
+        return (User) Objects.requireNonNull(
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication())
+                .getPrincipal();
     }
 }

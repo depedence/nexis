@@ -18,6 +18,10 @@ public class Page {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     @Column(name = "parent_id")
     private Long parentId;
 
@@ -42,5 +46,4 @@ public class Page {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-
 }
