@@ -10,6 +10,7 @@ import {
   PanelLeftOpen,
   Pencil,
   Plus,
+  LogOut,
   Search,
   Star,
   Sun,
@@ -26,6 +27,7 @@ import {
   type PointerEvent as ReactPointerEvent
 } from "react";
 import type { PageDto } from "../../shared/types/page";
+import { useAuth } from "../auth/AuthProvider";
 import { useTheme } from "../../shared/ui/ThemeProvider";
 
 type SidebarProps = {
@@ -128,6 +130,7 @@ export function Sidebar({
   onSelectPage,
   onToggleCollection
 }: SidebarProps) {
+  const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [sidebarWidth, setSidebarWidth] = useState(() => getStoredSidebarWidth());
   const [isCollapsed, setIsCollapsed] = useState(() => getStoredSidebarCollapsed());
@@ -769,6 +772,15 @@ export function Sidebar({
             title="Toggle theme"
           >
             {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+          <button
+            type="button"
+            className="theme-switch"
+            onClick={logout}
+            aria-label="Logout"
+            title="Logout"
+          >
+            <LogOut size={14} />
           </button>
           <button
             type="button"

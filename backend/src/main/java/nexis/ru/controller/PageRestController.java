@@ -53,6 +53,14 @@ public class PageRestController {
         return pageService.importMarkdown(file, parentId);
     }
 
+    @PostMapping("/import/zip")
+    public PageDto importZip(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) Long parentId
+    ) {
+        return pageService.importZip(file, parentId);
+    }
+
     @GetMapping("/favorites")
     public List<PageDto> getFavoritePages() {
         return pageService.getFavoritePages();

@@ -20,10 +20,12 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 @Service
@@ -107,6 +109,9 @@ public class PageService {
     public void deletePage(Long id) {
         Page page = pageRepository.findByIdAndUser(id, getCurrentUser())
                 .orElseThrow(() -> new EntityNotFoundException("Page not found"));
+        if (page.getType() == PageType.COLLECTION) {
+            pageRepository.deleteAllByParentIdAndUser(id, getCurrentUser());
+        }
         pageRepository.delete(page);
     }
 
@@ -189,6 +194,79 @@ public class PageService {
         Page savedPage = pageRepository.save(page);
 
         return pageMapper.toDto(savedPage);
+    }
+
+    public PageDto importZip(MultipartFile file, Long parentId) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("File is required");
+        }
+
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || !originalFilename.toLowerCase().endsWith(".zip")) {
+            throw new IllegalArgumentException("Only .zip files are supported");
+        }
+
+        if (parentId != null) {
+            Page grandParent = pageRepository.findByIdAndUser(parentId, getCurrentUser())
+                    .orElseThrow(() -> new EntityNotFoundException("Page not found"));
+            if (grandParent.getType() != PageType.COLLECTION) {
+                throw new IllegalArgumentException("Only collection can contain imported notes");
+            }
+        }
+
+        String collectionTitle = originalFilename.substring(0, originalFilename.length() - 4);
+        LocalDateTime now = LocalDateTime.now();
+
+        Page collection = new Page();
+        collection.setParentId(parentId);
+        collection.setTitle(collectionTitle);
+        collection.setType(PageType.COLLECTION);
+        collection.setPosition(0);
+        collection.setCreatedAt(now);
+        collection.setUpdatedAt(now);
+        collection.setUser(getCurrentUser());
+
+        Page savedCollection = pageRepository.save(collection);
+
+        try (ZipInputStream zipIn = new ZipInputStream(file.getInputStream())) {
+            ZipEntry entry;
+            int position = 0;
+
+            while ((entry = zipIn.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    zipIn.closeEntry();
+                    continue;
+                }
+
+                String entryName = entry.getName();
+                if (!entryName.toLowerCase().endsWith(".md")) {
+                    zipIn.closeEntry();
+                    continue;
+                }
+
+                String fileName = Paths.get(entryName).getFileName().toString();
+                String pageTitle = fileName.substring(0, fileName.length() - 3);
+                String content = new String(zipIn.readAllBytes(), StandardCharsets.UTF_8);
+
+                Page note = new Page();
+                note.setParentId(savedCollection.getId());
+                note.setTitle(pageTitle);
+                note.setContent(content);
+                note.setType(PageType.NOTE);
+                note.setPosition(position++);
+                note.setCreatedAt(now);
+                note.setUpdatedAt(now);
+                note.setUser(getCurrentUser());
+
+                pageRepository.save(note);
+
+                zipIn.closeEntry();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read zip file ", e);
+        }
+
+        return pageMapper.toDto(savedCollection);
     }
 
     public List<PageDto> getFavoritePages() {

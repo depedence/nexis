@@ -33,4 +33,6 @@ public interface PageRepository extends JpaRepository<Page, Long> {
 
     List<Page> findByUser(User user);
 
+    void deleteAllByParentIdAndUser(Long parentId, User user);
+
 }

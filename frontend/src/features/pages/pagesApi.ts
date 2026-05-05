@@ -1,5 +1,4 @@
-import { ApiError, apiClient } from "../../shared/api/apiClient";
-import { API_BASE_URL } from "../../shared/api/config";
+import { ApiError, apiClient, apiFetch, readApiError } from "../../shared/api/apiClient";
 import type {
   CreatePageRequest,
   PageDto,
@@ -69,16 +68,13 @@ export async function importMarkdown(file: File, parentId?: number): Promise<Pag
     formData.append("parentId", String(parentId));
   }
 
-  const response = await fetch(`${API_BASE_URL}/pages/import/markdown`, {
+  const response = await apiFetch("/pages/import/markdown", {
     method: "POST",
     body: formData
   });
 
   if (!response.ok) {
-    throw new ApiError(
-      await readApiError(response, `Import failed with status ${response.status}`),
-      response.status
-    );
+    throw new ApiError(await readApiError(response), response.status);
   }
 
   return (await response.json()) as PageDto;
@@ -88,10 +84,10 @@ export async function exportPage(
   pageId: number,
   fallbackPage?: ExportPageFallback
 ): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/pages/${pageId}/export`);
+  const response = await apiFetch(`/pages/${pageId}/export`);
 
   if (!response.ok) {
-    throw new Error(await readApiError(response, `Export failed with status ${response.status}`));
+    throw new Error(await readApiError(response));
   }
 
   const blob = await response.blob();
@@ -109,15 +105,6 @@ async function readFallbackPage(pageId: number) {
     return await getPage(pageId);
   } catch {
     return undefined;
-  }
-}
-
-async function readApiError(response: Response, fallback: string) {
-  try {
-    const payload = (await response.json()) as { message?: string; error?: string };
-    return payload.message ?? payload.error ?? fallback;
-  } catch {
-    return fallback;
   }
 }
 
