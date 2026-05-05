@@ -885,7 +885,6 @@ export function Sidebar({
             {!isLoading && !errorMessage && pages.length === 0 ? (
               <div className="sidebar__state sidebar__state--empty">
                 <div>No pages yet</div>
-                <span>Create the first note or collection to start writing.</span>
               </div>
             ) : null}
             {!isLoading && pages.map((page) => renderPage(page, 0))}

@@ -975,6 +975,11 @@ textarea {
   color: var(--text-soft);
 }
 
+.quick-search__input-wrap:focus-within {
+  background: transparent;
+  box-shadow: none;
+}
+
 .quick-search__input {
   width: 100%;
   min-width: 0;
@@ -987,6 +992,12 @@ textarea {
 
 .quick-search__input::placeholder {
   color: var(--placeholder);
+}
+
+.quick-search__input:focus {
+  outline: none;
+  box-shadow: none;
+  background: transparent;
 }
 
 .quick-search__body {
