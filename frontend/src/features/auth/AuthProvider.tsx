@@ -7,6 +7,7 @@ import {
   hasAuthSession,
   setAuthTokens
 } from "../../shared/auth/tokenStorage";
+import { useToast } from "../../shared/ui/ToastProvider";
 import { login as loginRequest, logout as logoutRequest, register as registerRequest } from "./authApi";
 
 type AuthContextValue = {
@@ -20,6 +21,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { showToast } = useToast();
   const [token, setToken] = useState<string | null>(() =>
     hasAuthSession() ? getAuthToken() : null
   );
@@ -52,11 +54,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession, token]);
 
   useEffect(() => {
-    const handleUnauthorized = () => clearSession();
+    const handleUnauthorized = () => {
+      showToast({
+        title: "Session expired",
+        description: "Please sign in again.",
+        variant: "error"
+      });
+      clearSession();
+    };
 
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
-  }, [clearSession]);
+  }, [clearSession, showToast]);
 
   const login = useCallback(async (payload: { username: string; password: string }) => {
     const nextTokens = await loginRequest(payload);

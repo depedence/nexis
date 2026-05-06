@@ -8,10 +8,18 @@ import {
   useState
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { Check, ChevronRight, Edit3, FileDown, FileText, Plus, Star } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  Edit3,
+  Eye,
+  FileDown,
+  FileText,
+  Plus,
+  Star
+} from "lucide-react";
 import remarkGfm from "remark-gfm";
 import type { PageDto } from "../../shared/types/page";
-import { useToast } from "../../shared/ui/ToastProvider";
 
 export type PageWorkspaceHandle = {
   runWithUnsavedChangesGuard: (action: () => void) => void;
@@ -35,6 +43,9 @@ type PageWorkspaceProps = {
   onExportPage: (page: PageDto) => void;
   onToggleFavorite: (page: PageDto) => void;
   onSavePage: (pageId: number, payload: { title: string; content: string }) => Promise<void>;
+  pageLoading: boolean;
+  pageError: string | null;
+  onRetryOpenPage: () => void;
 };
 
 type PendingAction = (() => void) | null;
@@ -59,11 +70,13 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
       onOpenPage,
       onExportPage,
       onToggleFavorite,
-      onSavePage
+      onSavePage,
+      pageLoading,
+      pageError,
+      onRetryOpenPage
     },
     ref
   ) {
-    const { showToast } = useToast();
     const [titleDraft, setTitleDraft] = useState(page?.title ?? "");
     const [contentDraft, setContentDraft] = useState(page?.content ?? "");
     const [isEditingContent, setIsEditingContent] = useState(false);
@@ -71,6 +84,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
     const titleRef = useRef<HTMLTextAreaElement | null>(null);
     const contentRef = useRef<HTMLTextAreaElement | null>(null);
     const isSavingRef = useRef(false);
+    const activePageIdRef = useRef<number | null>(page?.id ?? null);
     const lastSyncedRef = useRef({
       pageId: page?.id ?? null,
       title: page?.title ?? "",
@@ -91,9 +105,10 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
         lastSyncedRef.current.pageId === page?.id &&
         lastSyncedRef.current.title !== (titleDraft.trim() || "Untitled"));
     const previewContent = useMemo(() => contentDraft.trim(), [contentDraft]);
+    const textStats = useMemo(() => getTextStats(contentDraft), [contentDraft]);
 
     function runWithUnsavedChangesGuard(action: () => void) {
-      if (isEditingContent && isDraftDirty) {
+      if (isDraftDirty || isSaving) {
         setConfirmDialog({ action });
         return;
       }
@@ -106,20 +121,40 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
       () => ({
         runWithUnsavedChangesGuard
       }),
-      [isDraftDirty, isEditingContent]
+      [isDraftDirty, isSaving]
     );
 
     useEffect(() => {
-      setTitleDraft(page?.title ?? "");
-      setContentDraft(page?.content ?? "");
-      setIsEditingContent(false);
-      setConfirmDialog(null);
+      const nextPageId = page?.id ?? null;
+      const nextTitle = page?.title ?? "";
+      const nextContent = page?.content ?? "";
+
+      if (nextPageId !== activePageIdRef.current) {
+        activePageIdRef.current = nextPageId;
+        setTitleDraft(nextTitle);
+        setContentDraft(nextContent);
+        setIsEditingContent(false);
+        setConfirmDialog(null);
+        lastSyncedRef.current = {
+          pageId: nextPageId,
+          title: nextTitle,
+          content: nextContent
+        };
+        return;
+      }
+
+      if (isDraftDirty || isSaving) {
+        return;
+      }
+
+      setTitleDraft(nextTitle);
+      setContentDraft(nextContent);
       lastSyncedRef.current = {
-        pageId: page?.id ?? null,
-        title: page?.title ?? "",
-        content: page?.content ?? ""
+        pageId: nextPageId,
+        title: nextTitle,
+        content: nextContent
       };
-    }, [page?.id, page?.title, page?.content]);
+    }, [isDraftDirty, isSaving, page?.id, page?.title, page?.content]);
 
     useEffect(() => {
       const node = titleRef.current;
@@ -150,6 +185,17 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
 
       contentRef.current?.focus();
     }, [isEditingContent]);
+
+    useEffect(() => {
+      if (!page || page.title.trim() !== "Untitled" || (page.content ?? "").trim()) {
+        return;
+      }
+
+      window.setTimeout(() => {
+        titleRef.current?.focus();
+        titleRef.current?.select();
+      }, 0);
+    }, [page?.id]);
 
     useEffect(() => {
       if (!isEditingContent || !isDraftDirty) {
@@ -186,26 +232,19 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
     }, [isDraftDirty, isEditingContent]);
 
     async function flushTitleSave() {
-      if (!page || isEditingContent) {
+      await saveDraftChanges();
+    }
+
+    async function saveDraftChanges(afterSave?: PendingAction, options: { closeEditor?: boolean } = {}) {
+      if (!page || isSavingRef.current) {
         return;
       }
 
       const normalizedTitle = titleDraft.trim() || "Untitled";
 
-      if (normalizedTitle === lastSyncedRef.current.title) {
-        return;
-      }
-
-      await onSavePage(page.id, { title: titleDraft, content: lastSyncedRef.current.content });
-      lastSyncedRef.current = {
-        pageId: page.id,
-        title: normalizedTitle,
-        content: lastSyncedRef.current.content
-      };
-    }
-
-    async function saveContentChanges(afterSave?: PendingAction) {
-      if (!page || isSavingRef.current) {
+      if (!isDraftDirty) {
+        options.closeEditor && setIsEditingContent(false);
+        afterSave?.();
         return;
       }
 
@@ -215,16 +254,11 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
         await onSavePage(page.id, { title: titleDraft, content: contentDraft });
         lastSyncedRef.current = {
           pageId: page.id,
-          title: titleDraft.trim() || "Untitled",
+          title: normalizedTitle,
           content: contentDraft
         };
-        setIsEditingContent(false);
+        options.closeEditor && setIsEditingContent(false);
         setConfirmDialog(null);
-        showToast({
-          title: "Page saved",
-          description: "Markdown content is up to date.",
-          variant: "success"
-        });
         afterSave?.();
       } finally {
         isSavingRef.current = false;
@@ -249,7 +283,7 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
         return;
       }
 
-      void saveContentChanges();
+      void saveDraftChanges(undefined, { closeEditor: true });
     }
 
     function handleExportButtonClick() {
@@ -275,27 +309,53 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
       runWithUnsavedChangesGuard(onOpenHome);
     }
 
+    if (pageLoading) {
+      return (
+        <main className="main">
+          <div className="workspace">
+            <WorkspaceTopbar topbarContent={topbarContent} onCreatePage={onCreatePage} />
+            <section className="page-shell" aria-label="Loading page">
+              <div className="page-skeleton">
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+            </section>
+          </div>
+        </main>
+      );
+    }
+
+    if (pageError) {
+      return (
+        <main className="main">
+          <div className="workspace">
+            <WorkspaceTopbar topbarContent={topbarContent} onCreatePage={onCreatePage} />
+            <section className="page-shell">
+              <div className="page-load-error">
+                <h1>Page could not be loaded</h1>
+                <p>{pageError}</p>
+                <button
+                  type="button"
+                  className="ghost-button ghost-button--inline"
+                  title="Try again"
+                  onClick={onRetryOpenPage}
+                >
+                  Try again
+                </button>
+              </div>
+            </section>
+          </div>
+        </main>
+      );
+    }
+
     if (!page) {
       return (
         <main className="main">
           <div className="workspace workspace--home">
-            <div className="workspace__topbar">
-              <div className="breadcrumb">
-                <span className="breadcrumb__current">Nexis</span>
-              </div>
-              <div className="workspace__topbar-center">{topbarContent}</div>
-              <div className="workspace__actions">
-                <button
-                  type="button"
-                  className="workspace__icon-button"
-                  aria-label="Create note"
-                  title="Create note"
-                  onClick={onCreatePage}
-                >
-                  <Plus size={15} />
-                </button>
-              </div>
-            </div>
+            <WorkspaceTopbar topbarContent={topbarContent} onCreatePage={onCreatePage} />
 
             <section className="home-shell" aria-label="Home">
               <HomeSection
@@ -340,7 +400,27 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
             </div>
             <div className="workspace__topbar-center">{topbarContent}</div>
             <div className="workspace__actions">
-              <div className="workspace__status">{isSaving ? "Saving..." : ""}</div>
+              <div className="workspace__mode-toggle" role="group" aria-label="Editor mode">
+                <button
+                  type="button"
+                  className={isEditingContent ? "is-active" : ""}
+                  title="Edit"
+                  onClick={() => setIsEditingContent(true)}
+                >
+                  <Edit3 size={13} />
+                  <span>Edit</span>
+                </button>
+                <button
+                  type="button"
+                  className={!isEditingContent ? "is-active" : ""}
+                  title="Preview"
+                  disabled={isSaving}
+                  onClick={() => void saveDraftChanges(undefined, { closeEditor: true })}
+                >
+                  <Eye size={13} />
+                  <span>Preview</span>
+                </button>
+              </div>
               <button
                 type="button"
                 className={`workspace__icon-button workspace__favorite-button ${
@@ -390,16 +470,27 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
               onBlur={() => void flushTitleSave()}
             />
 
+            <div className="page-meta" aria-label="Page details">
+              <span>{textStats.words} words</span>
+              <span>{textStats.characters} chars</span>
+              <time dateTime={page.updatedAt}>{formatUpdatedAt(page.updatedAt)}</time>
+            </div>
+
             {isEditingContent ? (
-              <textarea
-                ref={contentRef}
-                className="page-content-editor"
-                rows={12}
-                value={contentDraft}
-                placeholder="Write in Markdown..."
-                disabled={isSaving}
-                onChange={(event) => setContentDraft(event.target.value)}
-              />
+              <div className="editor-surface">
+                <div className="editor-surface__bar">
+                  <span>Markdown</span>
+                </div>
+                <textarea
+                  ref={contentRef}
+                  className="page-content-editor"
+                  rows={12}
+                  value={contentDraft}
+                  placeholder="Write in Markdown..."
+                  disabled={isSaving}
+                  onChange={(event) => setContentDraft(event.target.value)}
+                />
+              </div>
             ) : previewContent ? (
               <div className="markdown-preview">
                 <ReactMarkdown
@@ -452,7 +543,9 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
                   className="ghost-button ghost-button--inline"
                   title="Save"
                   disabled={isSaving}
-                  onClick={() => void saveContentChanges(confirmDialog.action)}
+                  onClick={() =>
+                    void saveDraftChanges(confirmDialog.action, { closeEditor: true })
+                  }
                 >
                   Save
                 </button>
@@ -464,6 +557,44 @@ export const PageWorkspace = forwardRef<PageWorkspaceHandle, PageWorkspaceProps>
     );
   }
 );
+
+function WorkspaceTopbar({
+  topbarContent,
+  onCreatePage
+}: {
+  topbarContent?: ReactNode;
+  onCreatePage: () => void;
+}) {
+  return (
+    <div className="workspace__topbar">
+      <div className="breadcrumb">
+        <span className="breadcrumb__current">Nexis</span>
+      </div>
+      <div className="workspace__topbar-center">{topbarContent}</div>
+      <div className="workspace__actions">
+        <button
+          type="button"
+          className="workspace__icon-button"
+          aria-label="Create note"
+          title="Create note"
+          onClick={onCreatePage}
+        >
+          <Plus size={15} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function getTextStats(content: string) {
+  const plainText = stripMarkdown(content);
+  const words = plainText ? plainText.split(/\s+/).filter(Boolean).length : 0;
+
+  return {
+    words,
+    characters: content.length
+  };
+}
 
 type HomeSectionProps = {
   title: string;

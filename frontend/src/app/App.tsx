@@ -35,6 +35,8 @@ export function App() {
   const [favoritePagesLoading, setFavoritePagesLoading] = useState(true);
   const [recentPagesLoading, setRecentPagesLoading] = useState(true);
   const [selectedPageId, setSelectedPageId] = useState<number | null>(null);
+  const [selectedPageLoading, setSelectedPageLoading] = useState(false);
+  const [selectedPageError, setSelectedPageError] = useState<string | null>(null);
   const [pagesError, setPagesError] = useState<string | null>(null);
   const [recentPagesError, setRecentPagesError] = useState<string | null>(null);
   const [expandedCollectionIds, setExpandedCollectionIds] = useState<number[]>([]);
@@ -52,7 +54,7 @@ export function App() {
     useState<ImportingMarkdownTarget>(null);
   const [deleteDialogPageId, setDeleteDialogPageId] = useState<number | null>(null);
   const [isDeleteDialogClosing, setIsDeleteDialogClosing] = useState(false);
-  const [exitingPageIds, setExitingPageIds] = useState<number[]>([]);
+  const exitingPageIds = useMemo<number[]>(() => [], []);
   const [searchOpenRequestKey, setSearchOpenRequestKey] = useState(0);
   const selectedPageRef = useRef<number | null>(null);
   const workspaceRef = useRef<PageWorkspaceHandle | null>(null);
@@ -72,6 +74,18 @@ export function App() {
     void loadFavoritePages(controller.signal);
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (selectedPageId === null) {
+      setSelectedPageLoading(false);
+      setSelectedPageError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    void loadSelectedPage(selectedPageId, controller.signal);
+    return () => controller.abort();
+  }, [selectedPageId]);
 
   useEffect(() => {
     selectedPageRef.current = selectedPageId;
@@ -222,6 +236,40 @@ export function App() {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async function loadSelectedPage(pageId: number, signal?: AbortSignal) {
+    setSelectedPageLoading(true);
+    setSelectedPageError(null);
+
+    try {
+      const page = await getPage(pageId, signal);
+
+      if (signal?.aborted) {
+        return;
+      }
+
+      if (page.type !== "NOTE") {
+        setSelectedPageId(null);
+        return;
+      }
+
+      mergeLoadedPage(page);
+    } catch (error) {
+      if (!signal?.aborted) {
+        const message = getErrorMessage(error, "Page not found");
+        setSelectedPageError(message);
+        showToast({
+          title: "Page error",
+          description: message,
+          variant: "error"
+        });
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setSelectedPageLoading(false);
+      }
     }
   }
 
@@ -475,32 +523,38 @@ export function App() {
         ? null
         : getNextSelectedNoteId(rootPages, childrenByCollectionId, removedPageIds, pageId);
 
+    const previousState = {
+      rootPages,
+      childrenByCollectionId,
+      favoritePages,
+      allPages,
+      pageById,
+      childrenErrorByCollectionId,
+      loadingCollectionIds,
+      expandedCollectionIds,
+      selectedPageId: selectedPageRef.current
+    };
+
     setDeletingPageId(pageId);
+
+    if (isSelectedPageAffected) {
+      setSelectedPageId(nextSelectedPageId);
+    }
+
+    if (page?.type === "COLLECTION") {
+      setExpandedCollectionIds((current) => current.filter((id) => !removedPageIds.has(id)));
+    }
+
+    setRootPages((current) => current.filter((page) => !removedPageIds.has(page.id)));
+    setChildrenByCollectionId((current) => removePagesFromChildrenMap(current, removedPageIds));
+    setFavoritePages((current) => removePagesFromFavorites(current, removedPageIds));
+    setAllPages((current) => current.filter((page) => !removedPageIds.has(page.id)));
+    setPageById((current) => removePagesFromCache(current, removedPageIds));
+    setChildrenErrorByCollectionId((current) => omitRecordKeys(current, removedPageIds));
+    setLoadingCollectionIds((current) => current.filter((id) => !removedPageIds.has(id)));
 
     try {
       await deletePage(pageId);
-      setExitingPageIds((current) => addUniqueId(current, pageId));
-
-      if (isSelectedPageAffected) {
-        setSelectedPageId(nextSelectedPageId);
-      }
-
-      if (page?.type === "COLLECTION") {
-        setExpandedCollectionIds((current) => current.filter((id) => !removedPageIds.has(id)));
-      }
-
-      window.setTimeout(() => {
-        setRootPages((current) => current.filter((page) => !removedPageIds.has(page.id)));
-        setChildrenByCollectionId((current) =>
-          removePagesFromChildrenMap(current, removedPageIds)
-        );
-        setFavoritePages((current) => removePagesFromFavorites(current, removedPageIds));
-        setAllPages((current) => current.filter((page) => !removedPageIds.has(page.id)));
-        setPageById((current) => removePagesFromCache(current, removedPageIds));
-        setChildrenErrorByCollectionId((current) => omitRecordKeys(current, removedPageIds));
-        setLoadingCollectionIds((current) => current.filter((id) => !removedPageIds.has(id)));
-        setExitingPageIds((current) => current.filter((id) => id !== pageId));
-      }, EXIT_ANIMATION_MS);
 
       showToast({
         title: page?.type === "COLLECTION" ? "Collection deleted" : "Note deleted",
@@ -509,6 +563,15 @@ export function App() {
         variant: "success"
       });
     } catch (error) {
+      setRootPages(previousState.rootPages);
+      setChildrenByCollectionId(previousState.childrenByCollectionId);
+      setFavoritePages(previousState.favoritePages);
+      setAllPages(previousState.allPages);
+      setPageById(previousState.pageById);
+      setChildrenErrorByCollectionId(previousState.childrenErrorByCollectionId);
+      setLoadingCollectionIds(previousState.loadingCollectionIds);
+      setExpandedCollectionIds(previousState.expandedCollectionIds);
+      setSelectedPageId(previousState.selectedPageId);
       showToast({
         title: "Delete failed",
         description: getErrorMessage(error, "Failed to delete page"),
@@ -533,6 +596,12 @@ export function App() {
     }
 
     setSavingPageId(pageId);
+    mergeLoadedPage({
+      ...currentPage,
+      title: normalizedTitle,
+      content: normalizedContent,
+      updatedAt: new Date().toISOString()
+    });
 
     try {
       const updatedPage = await updatePage(pageId, {
@@ -541,6 +610,7 @@ export function App() {
       });
       mergeLoadedPage(updatedPage);
     } catch (error) {
+      mergeLoadedPage(currentPage);
       showToast({
         title: "Save failed",
         description: getErrorMessage(error, "Failed to update page"),
@@ -563,7 +633,13 @@ export function App() {
     }
 
     const nextFavorite = !page.favorite;
+    const optimisticPage = {
+      ...page,
+      favorite: nextFavorite
+    };
+
     setFavoritingPageId(page.id);
+    mergeLoadedPage(optimisticPage);
 
     try {
       const updatedPage = await setPageFavorite(page.id, { favorite: nextFavorite });
@@ -577,6 +653,7 @@ export function App() {
         variant: "success"
       });
     } catch (error) {
+      mergeLoadedPage(page);
       showToast({
         title: "Favorite failed",
         description: getErrorMessage(error, "Failed to update favorite"),
@@ -597,6 +674,11 @@ export function App() {
     }
 
     setSavingPageId(collectionId);
+    mergeLoadedPage({
+      ...currentPage,
+      title: normalizedTitle,
+      updatedAt: new Date().toISOString()
+    });
 
     try {
       const updatedPage = await updatePage(collectionId, {
@@ -605,6 +687,7 @@ export function App() {
       });
       mergeLoadedPage(updatedPage);
     } catch (error) {
+      mergeLoadedPage(currentPage);
       showToast({
         title: "Rename failed",
         description: getErrorMessage(error, "Failed to rename collection"),
@@ -776,6 +859,7 @@ export function App() {
         childrenErrorByCollectionId={childrenErrorByCollectionId}
         selectedPageId={selectedPageId}
         isLoading={pagesLoading}
+        favoritesLoading={favoritePagesLoading}
         errorMessage={pagesError}
         isCreatingPage={isCreatingPage}
         creatingChildCollectionId={creatingChildCollectionId}
@@ -811,6 +895,8 @@ export function App() {
         favoritePages={favoritePages}
         recentPages={recentPages}
         pagesLoading={pagesLoading}
+        pageLoading={selectedPageLoading}
+        pageError={selectedPageError}
         favoritePagesLoading={favoritePagesLoading}
         recentPagesLoading={recentPagesLoading}
         recentPagesError={recentPagesError}
@@ -826,6 +912,11 @@ export function App() {
         onCreatePage={() => runWithUnsavedChangesGuard(() => void handleCreateRootNote())}
         onOpenHome={openHome}
         onOpenPage={handleSelectNote}
+        onRetryOpenPage={() => {
+          if (selectedPageId !== null) {
+            void loadSelectedPage(selectedPageId);
+          }
+        }}
         onExportPage={(page) => void handleExportPage(page)}
         onToggleFavorite={(page) => void handleToggleFavorite(page)}
         onSavePage={handleSavePage}
@@ -870,7 +961,6 @@ export function App() {
 }
 
 const SELECTED_PAGE_STORAGE_KEY = "nexis-selected-page-id";
-const EXIT_ANIMATION_MS = 180;
 const CONFIRM_MODAL_EXIT_MS = 160;
 
 function sortPages(pages: PageDto[]) {

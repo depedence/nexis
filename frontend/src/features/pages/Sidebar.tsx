@@ -39,6 +39,7 @@ type SidebarProps = {
   childrenErrorByCollectionId: Record<number, string>;
   selectedPageId: number | null;
   isLoading: boolean;
+  favoritesLoading: boolean;
   errorMessage: string | null;
   isCreatingPage: boolean;
   creatingChildCollectionId: number | null;
@@ -88,6 +89,11 @@ type FavoriteTree = {
   groups: FavoriteCollectionGroup[];
 };
 
+type ActionMenuPosition = {
+  top: number;
+  left: number;
+};
+
 const SIDEBAR_WIDTH_STORAGE_KEY = "nexis-sidebar-width";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "nexis-sidebar-collapsed";
 const SIDEBAR_COLLAPSED_WIDTH = 64;
@@ -105,6 +111,7 @@ export function Sidebar({
   childrenErrorByCollectionId,
   selectedPageId,
   isLoading,
+  favoritesLoading,
   errorMessage,
   isCreatingPage,
   creatingChildCollectionId,
@@ -137,6 +144,7 @@ export function Sidebar({
   const [isResizing, setIsResizing] = useState(false);
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const [openActionMenuKey, setOpenActionMenuKey] = useState<string | null>(null);
+  const [actionMenuPosition, setActionMenuPosition] = useState<ActionMenuPosition | null>(null);
   const [expandedFavoriteCollectionIds, setExpandedFavoriteCollectionIds] = useState<number[]>([]);
   const [editingCollectionId, setEditingCollectionId] = useState<number | null>(null);
   const [collectionTitleDraft, setCollectionTitleDraft] = useState("");
@@ -172,7 +180,7 @@ export function Sidebar({
       return;
     }
 
-    setOpenActionMenuKey(null);
+    closeActionMenu();
     setEditingCollectionId(null);
   }, [isCollapsed]);
 
@@ -207,7 +215,7 @@ export function Sidebar({
         return;
       }
 
-      setOpenActionMenuKey(null);
+      closeActionMenu();
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
@@ -225,7 +233,7 @@ export function Sidebar({
       }
 
       event.preventDefault();
-      setOpenActionMenuKey(null);
+      closeActionMenu();
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -333,7 +341,7 @@ export function Sidebar({
       return;
     }
 
-    setOpenActionMenuKey(null);
+    closeActionMenu();
     collectionImportTargetIdRef.current = collectionId;
     input.value = "";
     input.click();
@@ -398,20 +406,38 @@ export function Sidebar({
   function toggleActionMenu(event: MouseEvent<HTMLButtonElement>, menuKey: string) {
     event.preventDefault();
     event.stopPropagation();
-    setOpenActionMenuKey((current) => (current === menuKey ? null : menuKey));
+
+    if (openActionMenuKey === menuKey) {
+      closeActionMenu();
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const menuWidth = 184;
+
+    setActionMenuPosition({
+      top: Math.min(rect.bottom + 4, window.innerHeight - 132),
+      left: Math.max(10, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 10))
+    });
+    setOpenActionMenuKey(menuKey);
+  }
+
+  function closeActionMenu() {
+    setOpenActionMenuKey(null);
+    setActionMenuPosition(null);
   }
 
   function exportSidebarPage(event: MouseEvent<HTMLButtonElement>, page: PageDto) {
     event.preventDefault();
     event.stopPropagation();
-    setOpenActionMenuKey(null);
+    closeActionMenu();
     onExportPage(page);
   }
 
   function toggleFavoriteFromMenu(event: MouseEvent<HTMLButtonElement>, page: PageDto) {
     event.preventDefault();
     event.stopPropagation();
-    setOpenActionMenuKey(null);
+    closeActionMenu();
     onToggleFavorite(page);
   }
 
@@ -613,14 +639,18 @@ export function Sidebar({
   function renderFavoritesSection() {
     const favoriteTree = getFavoriteTree(favoritePages, pages, childrenByCollectionId);
 
-    if (favoriteTree.rootNotes.length === 0 && favoriteTree.groups.length === 0) {
-      return null;
-    }
-
     return (
       <div className="sidebar__favorites">
         <div className="sidebar__label">Favorites</div>
         <div className="sidebar__list sidebar__list--favorites">
+          {favoritesLoading ? renderSidebarSkeleton("favorites") : null}
+          {!favoritesLoading &&
+          favoriteTree.rootNotes.length === 0 &&
+          favoriteTree.groups.length === 0 ? (
+            <div className="sidebar__state sidebar__state--empty">
+              <div>No favorite pages yet</div>
+            </div>
+          ) : null}
           {favoriteTree.rootNotes.map((page) =>
             renderNote(page, 0, { scope: "favorites", showDelete: false })
           )}
@@ -639,11 +669,11 @@ export function Sidebar({
       <div key={`favorites-group:${collection.id}`} className="sidebar__collection">
         <div className="sidebar__item sidebar__item--collection" style={getDepthStyle(0)}>
           <button
-          type="button"
-          className="sidebar__item-button sidebar__item-button--collection"
-          aria-expanded={isExpanded}
-          title={title}
-          onClick={() => toggleFavoriteCollection(collection.id)}
+            type="button"
+            className="sidebar__item-button sidebar__item-button--collection"
+            aria-expanded={isExpanded}
+            title={title}
+            onClick={() => toggleFavoriteCollection(collection.id)}
           >
             <span className={`sidebar__chevron ${isExpanded ? "is-expanded" : ""}`}>
               <ChevronRight size={13} />
@@ -651,6 +681,13 @@ export function Sidebar({
             {isExpanded ? <FolderOpen size={14} /> : <Folder size={14} />}
             <span>{title}</span>
           </button>
+          {renderPageActions(
+            collection,
+            savingPageId === collection.id ||
+              deletingPageId === collection.id ||
+              exitingPageIds.includes(collection.id),
+            `favorites-collection:${collection.id}`
+          )}
         </div>
         {isExpanded ? (
           <div className="sidebar__children sidebar__children--favorites">
@@ -691,7 +728,19 @@ export function Sidebar({
         </button>
 
         {isMenuOpen ? (
-          <div className="sidebar__item-menu" role="menu" aria-label={`${title} actions`}>
+          <div
+            className="sidebar__item-menu"
+            role="menu"
+            aria-label={`${title} actions`}
+            style={
+              actionMenuPosition
+                ? {
+                    top: actionMenuPosition.top,
+                    left: actionMenuPosition.left
+                  }
+                : undefined
+            }
+          >
             {page.type === "NOTE" ? (
               <button
                 type="button"
@@ -877,7 +926,7 @@ export function Sidebar({
 
           <div className="sidebar__list">
             {isLoading ? (
-              <div className="sidebar__state sidebar__state--muted">Loading pages...</div>
+              renderSidebarSkeleton("pages")
             ) : null}
             {!isLoading && errorMessage ? (
               <div className="sidebar__state sidebar__state--error">{errorMessage}</div>
@@ -885,6 +934,7 @@ export function Sidebar({
             {!isLoading && !errorMessage && pages.length === 0 ? (
               <div className="sidebar__state sidebar__state--empty">
                 <div>No pages yet</div>
+                <span>Create your first note</span>
               </div>
             ) : null}
             {!isLoading && pages.map((page) => renderPage(page, 0))}
@@ -903,6 +953,19 @@ export function Sidebar({
         onPointerDown={handleResizePointerDown}
       />
     </aside>
+  );
+}
+
+function renderSidebarSkeleton(keyPrefix: string) {
+  return (
+    <div className="sidebar__skeleton-list" aria-label="Loading pages">
+      {[0, 1, 2, 3].map((index) => (
+        <div key={`${keyPrefix}-skeleton-${index}`} className="sidebar__skeleton-item">
+          <span />
+          <span />
+        </div>
+      ))}
+    </div>
   );
 }
 
