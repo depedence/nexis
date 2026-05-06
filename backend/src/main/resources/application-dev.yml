@@ -9,6 +9,14 @@ spring:
       ddl-auto: update
     show-sql: true
 
+server:
+  error:
+    include-stacktrace: always
+    include-message: always
+
 app:
   cors:
     allowed-origin: http://localhost:5173
+
+jwt:
+  secret: ZGV2LWp3dC1zZWNyZXQtZm9yLWxvY2FsLXVzZS1vbmx5LTEyMzQ1Ng==

@@ -9,6 +9,14 @@ spring:
       ddl-auto: update
     show-sql: false
 
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+
 app:
   cors:
     allowed-origin: ${FRONTEND_URL}
+
+jwt:
+  secret: ${JWT_SECRET}
