@@ -3,6 +3,7 @@ package nexis.ru.service;
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import nexis.ru.entity.RefreshToken;
 import nexis.ru.entity.User;
 import nexis.ru.entity.UserRole;
 import nexis.ru.entity.request.LoginRequest;
@@ -20,6 +21,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
 
     public AuthResponse register(RegisterRequest request) {
@@ -40,9 +42,11 @@ public class AuthService {
         user.setUserRole(UserRole.USER);
 
         User savedUser = userRepository.save(user);
-        String token = jwtService.generateToken(savedUser.getUsername());
 
-        return new AuthResponse(token, savedUser.getUsername());
+        String accessToken = jwtService.generateToken(savedUser.getUsername());
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(savedUser);
+
+        return new AuthResponse(accessToken, refreshToken.getToken(), savedUser.getUsername());
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -53,8 +57,9 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid password");
         }
 
-        String token = jwtService.generateToken(user.getUsername());
+        String accessToken = jwtService.generateToken(user.getUsername());
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
 
-        return new AuthResponse(token, user.getUsername());
+        return new AuthResponse(accessToken, refreshToken.getToken(), user.getUsername());
     }
 }

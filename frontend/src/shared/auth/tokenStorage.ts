@@ -1,15 +1,38 @@
 const AUTH_TOKEN_STORAGE_KEY = "nexis-auth-token";
+const REFRESH_TOKEN_STORAGE_KEY = "nexis-refresh-token";
 
 export function getAuthToken() {
   return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+export function getRefreshToken() {
+  return window.localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY);
 }
 
 export function setAuthToken(token: string) {
   window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
 }
 
+export function setRefreshToken(token: string) {
+  window.localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, token);
+}
+
+export function setAuthTokens(tokens: { accessToken: string; refreshToken: string }) {
+  setAuthToken(tokens.accessToken);
+  setRefreshToken(tokens.refreshToken);
+}
+
 export function clearAuthToken() {
   window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+export function clearAuthTokens() {
+  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
+}
+
+export function hasAuthSession() {
+  return Boolean(getRefreshToken()) || hasUsableAuthToken();
 }
 
 export function hasUsableAuthToken() {

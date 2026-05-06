@@ -10,10 +10,15 @@ type RegisterPayload = {
   password: string;
 };
 
+export type AuthTokens = {
+  accessToken: string;
+  refreshToken: string;
+};
+
 type AuthResponse = unknown;
 
 export async function login(payload: LoginPayload) {
-  return extractToken(
+  return extractTokens(
     await apiClient<AuthResponse>("/auth/login", {
       method: "POST",
       body: payload,
@@ -24,7 +29,7 @@ export async function login(payload: LoginPayload) {
 }
 
 export async function register(payload: RegisterPayload) {
-  return extractToken(
+  return extractTokens(
     await apiClient<AuthResponse>("/auth/register", {
       method: "POST",
       body: payload,
@@ -34,27 +39,65 @@ export async function register(payload: RegisterPayload) {
   );
 }
 
-function extractToken(response: AuthResponse) {
-  if (typeof response === "string") {
-    return response;
+export async function logout(refreshToken: string) {
+  await apiClient<void>("/auth/logout", {
+    method: "POST",
+    body: { refreshToken },
+    auth: false,
+    handleUnauthorized: false
+  });
+}
+
+function extractTokens(response: AuthResponse): AuthTokens {
+  const payload = findTokenPayload(response);
+
+  if (!payload) {
+    throw new Error("Auth response does not contain tokens.");
   }
 
+  const accessToken =
+    getString(payload.accessToken) ??
+    getString(payload.token) ??
+    getString(payload.access_token) ??
+    getString(payload.jwt);
+  const refreshToken = getString(payload.refreshToken);
+
+  if (!accessToken || !refreshToken) {
+    throw new Error("Auth response does not contain tokens.");
+  }
+
+  return { accessToken, refreshToken };
+}
+
+function findTokenPayload(response: unknown): Record<string, unknown> | null {
   if (!response || typeof response !== "object") {
-    throw new Error("Auth response does not contain a token.");
+    return null;
   }
 
   const payload = response as Record<string, unknown>;
-  const token =
-    getString(payload.token) ??
-    getString(payload.accessToken) ??
-    getString(payload.jwt) ??
-    getString(payload.access_token);
 
-  if (!token) {
-    throw new Error("Auth response does not contain a token.");
+  if (hasTokenShape(payload)) {
+    return payload;
   }
 
-  return token;
+  const nestedCandidates = [payload.data, payload.result, payload.payload, payload.auth];
+  for (const candidate of nestedCandidates) {
+    if (candidate && typeof candidate === "object" && hasTokenShape(candidate as Record<string, unknown>)) {
+      return candidate as Record<string, unknown>;
+    }
+  }
+
+  return payload;
+}
+
+function hasTokenShape(payload: Record<string, unknown>) {
+  return Boolean(
+    getString(payload.refreshToken) &&
+      (getString(payload.accessToken) ||
+        getString(payload.token) ||
+        getString(payload.access_token) ||
+        getString(payload.jwt))
+  );
 }
 
 function getString(value: unknown) {

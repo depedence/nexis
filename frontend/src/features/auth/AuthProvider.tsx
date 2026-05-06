@@ -1,66 +1,81 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AUTH_UNAUTHORIZED_EVENT } from "../../shared/api/apiClient";
 import {
-  clearAuthToken,
+  clearAuthTokens,
   getAuthToken,
-  hasUsableAuthToken,
-  setAuthToken
+  getRefreshToken,
+  hasAuthSession,
+  setAuthTokens
 } from "../../shared/auth/tokenStorage";
-import { login as loginRequest, register as registerRequest } from "./authApi";
+import { login as loginRequest, logout as logoutRequest, register as registerRequest } from "./authApi";
 
 type AuthContextValue = {
   token: string | null;
   isAuthenticated: boolean;
   login: (payload: { username: string; password: string }) => Promise<void>;
   register: (payload: { username: string; password: string }) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() =>
-    hasUsableAuthToken() ? getAuthToken() : null
+    hasAuthSession() ? getAuthToken() : null
   );
 
-  const logout = useCallback(() => {
-    clearAuthToken();
+  const clearSession = useCallback(() => {
+    clearAuthTokens();
     setToken(null);
   }, []);
 
+  const logout = useCallback(async () => {
+    const refreshToken = getRefreshToken();
+
+    try {
+      if (refreshToken) {
+        await logoutRequest(refreshToken);
+      }
+    } catch {
+      // Local logout must complete even if the server-side session is already gone.
+    } finally {
+      clearSession();
+    }
+  }, [clearSession]);
+
   useEffect(() => {
-    if (token || !getAuthToken()) {
+    if (token || hasAuthSession()) {
       return;
     }
 
-    clearAuthToken();
-  }, [token]);
+    clearSession();
+  }, [clearSession, token]);
 
   useEffect(() => {
-    const handleUnauthorized = () => logout();
+    const handleUnauthorized = () => clearSession();
 
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
     return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
-  }, [logout]);
+  }, [clearSession]);
 
   const login = useCallback(async (payload: { username: string; password: string }) => {
-    const nextToken = await loginRequest(payload);
+    const nextTokens = await loginRequest(payload);
 
-    setAuthToken(nextToken);
-    setToken(nextToken);
+    setAuthTokens(nextTokens);
+    setToken(nextTokens.accessToken);
   }, []);
 
   const register = useCallback(async (payload: { username: string; password: string }) => {
-    const nextToken = await registerRequest(payload);
+    const nextTokens = await registerRequest(payload);
 
-    setAuthToken(nextToken);
-    setToken(nextToken);
+    setAuthTokens(nextTokens);
+    setToken(nextTokens.accessToken);
   }, []);
 
   const value = useMemo(
     () => ({
       token,
-      isAuthenticated: Boolean(token) && hasUsableAuthToken(),
+      isAuthenticated: hasAuthSession(),
       login,
       register,
       logout
