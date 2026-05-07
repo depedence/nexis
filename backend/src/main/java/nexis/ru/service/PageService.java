@@ -43,7 +43,7 @@ public class PageService {
         Page parent = null;
         if (request.getParentId() != null) {
             parent = pageRepository.findByIdAndUser(request.getParentId(), getCurrentUser())
-                .orElseThrow(() -> new EntityNotFoundException("Parent not found"));
+                    .orElseThrow(() -> new EntityNotFoundException("Parent not found"));
 
             if (parent.getType() != PageType.COLLECTION) {
                 throw new IllegalArgumentException("Only collections can contain pages");
@@ -119,8 +119,8 @@ public class PageService {
         List<Page> pages = pageRepository.search(getCurrentUser(), query);
 
         return pages.stream()
-            .map(pageMapper::toDto)
-            .toList();
+                .map(pageMapper::toDto)
+                .toList();
     }
 
     public List<PageDto> getRootPages() {
@@ -182,7 +182,7 @@ public class PageService {
         LocalDateTime now = LocalDateTime.now();
 
         Page page = new Page();
-        page.setParentId(parentId != null ? parent.getId() : null);
+        page.setParentId(parentId);
         page.setTitle(title);
         page.setContent(content);
         page.setType(PageType.NOTE);
@@ -271,16 +271,16 @@ public class PageService {
 
     public List<PageDto> getFavoritePages() {
         List<Page> pages = pageRepository
-            .findByTypeAndFavoriteTrueOrderByUpdatedAtDesc(PageType.NOTE, getCurrentUser());
+                .findByTypeAndFavoriteTrueOrderByUpdatedAtDesc(PageType.NOTE, getCurrentUser());
 
         return pages.stream()
-            .map(pageMapper::toDto)
-            .toList();
+                .map(pageMapper::toDto)
+                .toList();
     }
 
     public PageDto setFavorite(Long id, SetFavoriteRequest request) {
         Page page = pageRepository.findByIdAndUser(id, getCurrentUser())
-            .orElseThrow(() -> new EntityNotFoundException("Page not found"));
+                .orElseThrow(() -> new EntityNotFoundException("Page not found"));
 
         if (page.getType() == PageType.COLLECTION) {
             throw new IllegalArgumentException("Only notes can be added to favorites");
@@ -302,8 +302,7 @@ public class PageService {
         return new ExportFileResponse(
                 filename,
                 "application/octet-stream",
-                markdown.getBytes(StandardCharsets.UTF_8)
-        );
+                markdown.getBytes(StandardCharsets.UTF_8));
     }
 
     private ExportFileResponse exportCollection(Page collection) {
@@ -334,8 +333,7 @@ public class PageService {
             return new ExportFileResponse(
                     sanitizeFilename(collection.getTitle()) + ".zip",
                     "application/zip",
-                    byteArrayOutputStream.toByteArray()
-            );
+                    byteArrayOutputStream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException("Failed to export collection", e);
         }
