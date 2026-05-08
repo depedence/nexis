@@ -5,6 +5,7 @@
 # backend
 backend/.idea/
 backend/target/
+backend/build
 
 # frontend
 frontend/agents.md

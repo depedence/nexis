@@ -107,7 +107,7 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
             <p>{isRegister ? "Start writing in your workspace." : "Sign in to continue writing."}</p>
           </div>
 
-          {formError ? <div className="auth-form__error">{formError}</div> : null}
+          {formError ? <div className="auth-form__error" data-testid="form-error">{formError}</div> : null}
 
           <label className="auth-field">
             <span>{usernameLabel}</span>
@@ -121,6 +121,7 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
                   setUsername(event.target.value);
                   clearFieldError("username");
                 }}
+                data-testid="username-input"
               />
             </span>
             {fieldErrors.username ? <span className="auth-field__error">{fieldErrors.username}</span> : null}
@@ -139,6 +140,7 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
                   setPassword(event.target.value);
                   clearFieldError("password");
                 }}
+                data-testid="password-input"
               />
             </span>
             {fieldErrors.password ? <span className="auth-field__error">{fieldErrors.password}</span> : null}
@@ -158,6 +160,7 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
                     setConfirmPassword(event.target.value);
                     clearFieldError("confirmPassword");
                   }}
+                  data-testid="confirm-password-input"
                 />
               </span>
               {fieldErrors.confirmPassword ? (
@@ -171,6 +174,7 @@ export function AuthPage({ mode, onNavigate }: AuthPageProps) {
             className="auth-submit"
             disabled={isSubmitting || !canSubmit}
             title={submitLabel}
+            data-testid="auth-btn"
           >
             <span>{isSubmitting ? "Please wait..." : submitLabel}</span>
             <ArrowRight size={15} />
