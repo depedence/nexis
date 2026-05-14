@@ -828,6 +828,7 @@ export function Sidebar({
             onClick={logout}
             aria-label="Logout"
             title="Logout"
+            data-testid="logout-btn"
           >
             <LogOut size={14} />
           </button>
@@ -934,7 +935,6 @@ export function Sidebar({
             {!isLoading && !errorMessage && pages.length === 0 ? (
               <div className="sidebar__state sidebar__state--empty">
                 <div>No pages yet</div>
-                <span>Create your first note</span>
               </div>
             ) : null}
             {!isLoading && pages.map((page) => renderPage(page, 0))}
