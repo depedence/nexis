@@ -1,5 +1,13 @@
 package nexis.ru.ui.page;
 
+import java.time.Duration;
+
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
+
+import com.codeborne.selenide.Condition;
+import com.codeborne.selenide.WebDriverRunner;
+
 public class AuthPage extends BasePage {
 
     public AuthPage openRegister() {
@@ -9,6 +17,11 @@ public class AuthPage extends BasePage {
 
     public AuthPage openLogin() {
         open("/login");
+        return this;
+    }
+
+    public AuthPage authBtnIsVisible() {
+        byTest("auth-btn").shouldBe(Condition.visible);
         return this;
     }
 
@@ -26,7 +39,14 @@ public class AuthPage extends BasePage {
         return this;
     }
 
-    public boolean formErrorIsVisible() {
-        return byTest("form-error").isDisplayed();
+    public AuthPage formErrorIsVisible() {
+        byTest("form-error").shouldBe(Condition.visible);
+        return this;
+    }
+
+    public AuthPage shouldBeRedirectTo(String path) {
+        new WebDriverWait(WebDriverRunner.getWebDriver(), Duration.ofSeconds(10))
+                .until(ExpectedConditions.urlContains(path));
+        return this;
     }
 }
