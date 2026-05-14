@@ -13,9 +13,9 @@ import nexis.ru.ui.page.AuthPage;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class AuthUiTest extends BaseUiTest {
 
-    private String random = UUID.randomUUID().toString().substring(0, 4);
-    private String username = "username_" + random;
-    private String password = "password_" + random;
+    private final String random = UUID.randomUUID().toString().substring(0, 4);
+    private final String username = "username_" + random;
+    private final String password = "password_" + random;
 
     @Test
     @Order(1)

@@ -20,6 +20,11 @@ public class AuthPage extends BasePage {
         return this;
     }
 
+    public AuthPage authBtnIsVisible() {
+        byTest("auth-btn").shouldBe(Condition.visible);
+        return this;
+    }
+
     public AuthPage fillInputs(String username, String password, boolean register) {
         byTest("username-input").setValue(username);
         byTest("password-input").setValue(password);
