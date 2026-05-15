@@ -17,4 +17,10 @@ public class AuthClient {
                 .body(body)
                 .when().post("/api/auth/register");
     }
+
+    public Response login(AuthModel body) {
+        return given().spec(requestSpec)
+                .body(body)
+                .when().post("/api/auth/login");
+    }
 }
