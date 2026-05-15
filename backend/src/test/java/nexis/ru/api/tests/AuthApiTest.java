@@ -4,7 +4,6 @@ import nexis.ru.api.client.AuthClient;
 import nexis.ru.api.models.AuthModel;
 import nexis.ru.infra.api.BaseApiTest;
 import nexis.ru.support.data.UserDataFactory;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -19,15 +18,9 @@ public class AuthApiTest extends BaseApiTest {
 
     @BeforeEach
     void setup() {
-        dbCleaner.cleanDb();
         client = new AuthClient(requestSpec);
         body = UserDataFactory.randomUser();
         invalidBody = UserDataFactory.invalidUser();
-    }
-
-    @AfterEach
-    void teardown() {
-        dbCleaner.cleanDb();
     }
 
     // ===== Register =====

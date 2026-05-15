@@ -8,6 +8,7 @@ import io.restassured.http.ContentType;
 import io.restassured.specification.RequestSpecification;
 import io.restassured.specification.ResponseSpecification;
 import nexis.ru.support.data.DatabaseCleaner;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,6 +28,8 @@ public abstract class BaseApiTest {
 
     @BeforeEach
     void setupRestAssured() {
+        dbCleaner.cleanDb();
+
         RestAssured.port = port;
         RestAssured.baseURI = "http://localhost";
         RestAssured.enableLoggingOfRequestAndResponseIfValidationFails();
@@ -41,5 +44,10 @@ public abstract class BaseApiTest {
         responseSpec = new ResponseSpecBuilder()
                 .expectContentType(ContentType.JSON)
                 .build();
+    }
+
+    @AfterEach
+    void teardownRestAssured() {
+        dbCleaner.cleanDb();
     }
 }
