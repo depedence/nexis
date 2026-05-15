@@ -122,6 +122,7 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Rest Assured + Selenide -->
         <dependency>
             <groupId>io.rest-assured</groupId>
             <artifactId>rest-assured</artifactId>
